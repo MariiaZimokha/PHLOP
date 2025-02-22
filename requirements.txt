@@ -1,0 +1,10 @@
+mujoco
+mujoco-py
+numpy
+opencv-python
+matplotlib
+scipy
+glfw
+imageio
+imageio[ffmpeg]
+pyopengl

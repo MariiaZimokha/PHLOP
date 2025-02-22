@@ -1,4 +1,5 @@
 import random
+from dataset.taxonomy import PhysicsTaxonomy
 import numpy as np
 import mujoco
 import imageio

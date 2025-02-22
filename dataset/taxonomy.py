@@ -3,6 +3,8 @@
 # FORCE_THRESHOLD = 10.0    # example for push/pull detection
 # G = 9.8                   # gravity
 
+import mujoco
+import numpy as np
 
 class PhysicsTaxonomy:
     def __init__(self, objects):
