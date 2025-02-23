@@ -102,7 +102,7 @@ class Annotator:
                 "active_labels": active_labels,
                 "position": position,
                 "bbox": bbox,
-                "segment_polygons": [contour.tolist() for contour in seg_polygons],
+                # "segment_polygons": [contour.tolist() for contour in seg_polygons],
             }
 
         return frame_annotation
