@@ -162,7 +162,7 @@ class Simulation:
                 model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free"
             )
             adr = model.jnt_dofadr[joint_id]
-            data.qvel[adr : adr + 6] = [*obj["velocity"], *obj["angular_velocity"]]
+            data.qvel[adr: adr + 6] = [*obj["velocity"], *obj["angular_velocity"]]
 
             geom_name = f"geom_obj{i}"
             geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
@@ -170,6 +170,21 @@ class Simulation:
             objects[i]["id"] = f"geom_obj{i}"
 
         physics = PhysicsTaxonomy(objects)
+
+        prev_frame_data = {}
+
+        for i, obj in enumerate(objects):
+            obj_id = obj["id"]
+            joint_name = f"obj{i}_free"
+            joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+            adr = model.jnt_dofadr[joint_id]
+            velocity = data.qvel[adr: adr + 3].tolist()
+            position = data.qpos[adr: adr + 3].tolist()
+
+            prev_frame_data[obj_id] = {
+                "velocity": velocity,
+                "position": position,
+            }
 
         normal_frames = []
         segmentation_frames = []
@@ -198,31 +213,35 @@ class Simulation:
                     # Render the segmentation frame (enable segmentation).
                     renderer.enable_segmentation_rendering()
                     renderer.update_scene(data, camera=self.camera_settings.camera)
-                    # renderer.update_scene(data, camera="top")
+
                     seg_frame = renderer.render()
 
+                    # annotation
                     mask = self.__convert_segmentation_to_mask(seg_frame)
                     segmentation_frames.append(mask)
 
                     annotation = self.annotator.get_annotation(
                         seg_frame, objects, data, model
                     )
-                    # print(annotation)
+
                     pairs = self.__detect_collisions(model, data)
-                    events = physics.get_taxonomy(model, data, dt)
-                    # print("taxonomy ",events)
-                    # print(annotation["objects"].keys())
-                    # print(events.keys())
-                    # print(events)
+                    events = physics.get_taxonomy(model, data, dt, prev_frame_data)
+
                     annotation_all = {}
                     for object_id in set(annotation["objects"].keys()).union(
                         events.keys()
                     ):
-                        # print(object_id)
-                        # print('events ', events[object_id])
                         annotation_all[object_id] = {
                             **annotation["objects"].get(object_id, {}),
                             "taxonomy": events.get(object_id, {}),
+                            "prev_data": {
+                                "velocity": prev_frame_data.get(object_id, {}).get(
+                                    "velocity", [0] * 3
+                                ),
+                                "position": prev_frame_data.get(object_id, {}).get(
+                                    "position", [0] * 3
+                                ),
+                            },
                         }
 
                     annotation_frames.append(
@@ -232,6 +251,21 @@ class Simulation:
                             "interations": pairs,
                         }
                     )
+
+                    for i, obj in enumerate(objects):
+                        obj_id = obj["id"]
+                        joint_name = f"obj{i}_free"
+                        joint_id = mujoco.mj_name2id(
+                            model, mujoco.mjtObj.mjOBJ_JOINT, joint_name
+                        )
+                        adr = model.jnt_dofadr[joint_id]
+                        velocity = data.qvel[adr: adr + 3].tolist()
+                        position = data.qpos[adr: adr + 3].tolist()
+
+                        prev_frame_data[obj_id] = {
+                            "velocity": velocity,
+                            "position": position,
+                        }
 
         # Save the normal and segmentation videos.
         normal_video_filename = f"{path}simulation_{num_objects}_objects.mp4"
