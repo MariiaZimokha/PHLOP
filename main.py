@@ -1,3 +1,4 @@
+from dataset.question_answer import QuestionAnswers
 from dataset.object import Object
 from dataset.annotator import Annotator
 from dataset.video_annotation_visualizer import VideoAnnotationVisualizer
@@ -24,3 +25,9 @@ video_annotator.annotate(
     video_path=video_file,
     annotated_video_path=f"{path}output_video_{num_objects}.mp4",
 )
+
+
+q = QuestionAnswers(file_path)
+questions_answers = q.get_questions_answers()
+
+print(questions_answers)
