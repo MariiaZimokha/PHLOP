@@ -69,9 +69,9 @@ class Annotator:
             joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
             adr = model.jnt_dofadr[joint_id]
 
-            velocity = data.qvel[adr : adr + 3].tolist()
-            angular_velocity = data.qvel[adr + 3 : adr + 6].tolist()
-            position = data.qpos[adr : adr + 3].tolist()
+            velocity = data.qvel[adr: adr + 3].tolist()
+            angular_velocity = data.qvel[adr + 3: adr + 6].tolist()
+            position = data.qpos[adr: adr + 3].tolist()
 
             active_labels = []
 
@@ -86,7 +86,7 @@ class Annotator:
                 active_labels.append("Stopped")
 
             # Tilt detection (for a free joint, orientation is in qpos[adr+3:adr+7] as a quaternion)
-            quat = data.qpos[adr + 3 : adr + 7]
+            quat = data.qpos[adr + 3: adr + 7]
             rot_mat = np.zeros((3, 3))
             mujoco.mju_quat2Mat(rot_mat.ravel(), quat)
             # local z-axis is rot_mat[:,2], dot with global z-axis => cos(tilt)

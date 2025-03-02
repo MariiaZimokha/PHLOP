@@ -31,12 +31,11 @@ class PhysicsTaxonomy:
 
         accel = (vel_curr - vel_prev) / dt
         accel_magnitude = round(np.linalg.norm(accel), self.precision)
-        # print(vel_curr_magnitude, "vel_curr_magnitude")
-        if vel_curr_magnitude == self.velocity_threshold:
+
+        if abs(vel_curr_magnitude - self.velocity_threshold) < self.velocity_threshold:
             return "Stationary"
 
-        if vel_curr_magnitude <= self.velocity_threshold and vel_prev_magnitude <= self.velocity_threshold:
-           # if np.linalg.norm(vel_curr) <  1e-6:
+        if abs(vel_curr_magnitude) <= self.velocity_threshold and abs(vel_prev_magnitude) <= self.velocity_threshold:
             return "Stationary"
         # Check if acceleration is negligible (constant velocity)
         elif accel_magnitude < self.acceleration_threshold:
@@ -97,6 +96,8 @@ class PhysicsTaxonomy:
             vel1_post = data.qvel[adr1: adr1 + 3].tolist()
             vel2_post = data.qvel[adr2: adr2 + 3].tolist()
 
+            normal = normal / (np.linalg.norm(normal) + 1e-6)
+
             # Calculate relative velocities before and after the collision
             rel_vel_pre = np.dot((np.array(vel1_pre) - np.array(vel2_pre)), normal)
             rel_vel_post = np.dot((np.array(vel1_post) - np.array(vel2_post)), normal)
@@ -120,6 +121,54 @@ class PhysicsTaxonomy:
 
         return collision_results
 
+    def map_motion_state(self, motion):
+        if motion == "Stationary":
+            return "Stationary"
+        elif motion in ("Constant Velocity", "Accelerating", "Decelerating"):
+            return "Moving"
+        else:
+            return None
+
+    def detect_state_transitions(self, cur_velocity, prev_velocity, object_id, dt):
+        """
+        if velocity magnitude approching 0 over time : Moving -> Stopping (due to friction)
+        if prev_velocity is 0, and current >0 : Stationary -> Moving (due External Forces)
+        """
+
+        cur_motion = self.detect_linear_motion(prev_velocity, cur_velocity, dt)
+        prev_motion = self.motion_history[object_id][-1] if self.motion_history[object_id] else None
+
+        prev_motion_mapped = self.map_motion_state(prev_motion) if prev_motion else None
+
+        state_transitions = ""
+
+        if prev_motion_mapped == "Moving" and cur_motion == "Decelerating":
+            state_transitions = "Moving to Stopping"
+        elif prev_motion_mapped == "Stationary" and cur_motion in ("Accelerating", "Constant Velocity"):
+            state_transitions = "Stationary to Moving"
+
+        if cur_motion:
+            self.motion_history[object_id].append(cur_motion)
+
+        return state_transitions
+
+    def get_state_transitions_labels(self, cur_velocity, prev_velocity, object_id, dt):
+        subcategory = self.detect_state_transitions(cur_velocity, prev_velocity, object_id, dt)
+        if subcategory:
+            if subcategory == "Moving to Stopping":
+                return {
+                    "category": "State transitions",
+                    "subcategory": subcategory,
+                    "labels": ["Friction causes deceleration"]
+                }
+            if subcategory == "Stationary to Moving":
+                return {
+                    "category": "State transitions",
+                    "subcategory": subcategory,
+                    "labels": ["Force overcomes static friction"]
+                }
+        return None
+
     def get_taxonomy(self, model, data, dt, prev_frame, current_objects):
 
         results = {obj["id"]: [] for obj in self.objects}
@@ -129,13 +178,6 @@ class PhysicsTaxonomy:
         for obj in self.objects:
             object_id = obj["id"]
 
-            # Get joint address for the object
-            # joint_name = f"obj{obj['geom_id']}_free"
-            # joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
-            # adr = model.jnt_dofadr[joint_id]
-
-            # current velocity and position form mujoco model
-            # velocity = data.qvel[adr : adr + 3].tolist()
             cur_velocity = current_objects.get(object_id, {}).get("velocity", [])
             prev_velocity = prev_frame.get(object_id, {}).get("velocity", [])
             prev_velocity = [float(x) for x in prev_velocity]
@@ -143,6 +185,11 @@ class PhysicsTaxonomy:
             linear_motion = self.analyze_motion(object_id, prev_velocity[:3], cur_velocity, dt)
             if linear_motion:
                 results[object_id].append(linear_motion)
+
+            # Detect state transitions
+            state_transitions = self.get_state_transitions_labels(cur_velocity, prev_velocity[:3], object_id, dt)
+            if state_transitions:
+                results[object_id].append(state_transitions)
 
         # add collision results to the objects
         for (g1, g2), collision_info in collision_results.items():

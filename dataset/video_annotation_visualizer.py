@@ -57,8 +57,8 @@ class VideoAnnotationVisualizer:
                     taxonomy_labels = [t["labels"] for t in taxonomies]
                     # print(taxonomy_labels)
                     if taxonomy_labels:
-                        taxonomy_labels = (
-                            np.concatenate(taxonomy_labels).ravel().tolist()
+                        taxonomy_labels = list(
+                            set(np.concatenate(taxonomy_labels).ravel().tolist())
                         )
 
                     # Convert RGBA to BGR color format for OpenCV
@@ -72,7 +72,11 @@ class VideoAnnotationVisualizer:
                     bg_color = (0, 0, 0)  # Black background for contrast
 
                     #  description
-                    text = f"Mass: {mass:.2f} kg\nVelocity: {[round(v, 2) for v in velocity]}\nMaterial: {material}\nTaxonomy: {','.join(taxonomy_labels)}"
+                    v = round(np.linalg.norm(velocity), 4)
+                    # print("taxonomy_labels,", taxonomy_labels)
+                    # print("velocity,", v, velocity)
+                    # text = f"Mass: {mass:.2f} kg\nVelocity: {[round(v, 2) for v in velocity]}\nMaterial: {material}\nTaxonomy: {','.join(taxonomy_labels)}"
+                    text = f"Mass: {mass:.2f} kg\nVelocity: {v}\nMaterial: {material}\nTaxonomy: {','.join(taxonomy_labels)}"
                     y_offset = 20
 
                     for line in text.split("\n"):
