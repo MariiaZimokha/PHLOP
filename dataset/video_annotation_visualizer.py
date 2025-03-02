@@ -51,6 +51,7 @@ class VideoAnnotationVisualizer:
 
                     mass = obj_data["mass"]
                     velocity = obj_info["velocity"]
+                    angular_velocity = obj_info["angular_velocity"]
                     material = obj_data["material"]
                     color = obj_data["visual"]["rgba"]
                     taxonomies = obj_info.get("taxonomy", [])
@@ -73,10 +74,11 @@ class VideoAnnotationVisualizer:
 
                     #  description
                     v = round(np.linalg.norm(velocity), 4)
+                    av = round(np.linalg.norm(angular_velocity), 4)
                     # print("taxonomy_labels,", taxonomy_labels)
                     # print("velocity,", v, velocity)
                     # text = f"Mass: {mass:.2f} kg\nVelocity: {[round(v, 2) for v in velocity]}\nMaterial: {material}\nTaxonomy: {','.join(taxonomy_labels)}"
-                    text = f"Mass: {mass:.2f} kg\nVelocity: {v}\nMaterial: {material}\nTaxonomy: {','.join(taxonomy_labels)}"
+                    text = f"Mass: {mass:.2f} kg\nVelocity: {v}\nAng Vel: {av}\nMaterial: {material}\nTaxonomy: {','.join(taxonomy_labels)}"
                     y_offset = 20
 
                     for line in text.split("\n"):

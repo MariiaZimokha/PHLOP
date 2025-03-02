@@ -11,7 +11,7 @@ from dataset.camera import CameraSettings
 
 
 class Simulation:
-    def __init__(self, world_object, width=1440, height=1024, annotator=None):
+    def __init__(self, world_object, width=1920, height=1088, annotator=None):
         self.obj = world_object
         self.width, self.height = width, height
         self.modes = ["collision", "sliding", "stationary", "offset"]
@@ -25,7 +25,7 @@ class Simulation:
     <size nconmax="200" njmax="200"/>
     <option timestep="0.0005" gravity="0 0 -9.81"/>
     <visual>
-        <global offwidth="{self.width}" offheight="{self.height}"/>
+        <global offwidth="{self.width}" offheight="{self.height}" />
     </visual>"""
 
         self.world_body_start = """
@@ -108,7 +108,7 @@ class Simulation:
         return colliding_pairs
 
     def run_simulation(
-        self, num_objects=3, objects=None, duration=5.0, framerate=24, camera=None, path=""
+        self, num_objects=3, objects=None, duration=5.0, framerate=25, camera=None, path=""
     ):
         """
         camera:
@@ -155,6 +155,7 @@ class Simulation:
         prev_frame_data = {
             obj["id"]: {
                 "velocity": [float(x) for x in obj["velocity"]],
+                "angular_velocity": [float(x) for x in obj["angular_velocity"]],
                 "position": [obj["init_possition_x"], obj["init_possition_y"], obj["base_z"]],
             }
             for obj in objects
@@ -191,7 +192,7 @@ class Simulation:
                     current_time = data.time
                     dt = current_time - prev_time
                     # df = 1.0 / framerate
-                    # prev_time = current_time
+                    prev_time = current_time
                     events = physics.get_taxonomy(model, data, dt, prev_frame_data, annotation["objects"])
 
                     annotation_all = {
@@ -216,12 +217,13 @@ class Simulation:
                         adr = model.jnt_dofadr[joint_id]
                         prev_frame_data[obj_id] = {
                             "velocity": [float(x) for x in data.qvel[adr: adr + 3].tolist()],
+                            "angular_velocity": [float(x) for x in data.qvel[adr + 3: adr + 6].tolist()],
                             "position": data.qpos[adr: adr + 3].tolist(),
                         }
 
         normal_video_filename = f"{path}simulation_{num_objects}_objects.mp4"
         segmentation_video_filename = f"{path}simulation_{num_objects}_objects_segmentation.mp4"
-        imageio.mimsave(normal_video_filename, normal_frames, fps=framerate)
+        imageio.mimsave(normal_video_filename, normal_frames, fps=framerate, codec='libx264')
         imageio.mimsave(segmentation_video_filename, segmentation_frames, fps=framerate)
 
         data = {
