@@ -58,7 +58,7 @@ class PhysicsTaxonomy:
             "labels": [current_motion],
         }
 
-    def detect_collision(self, model, data, prev_frame):
+    def detect_collision(self, model, data, prev_frame, current_objects):
         """
         Detect collisions between objects and classify them as elastic or inelastic.
         Returns a dictionary of collision results for each interacting pair.
@@ -81,20 +81,15 @@ class PhysicsTaxonomy:
             # Get object IDs and their velocities before the collision
             vel1_id = next((obj["id"] for obj in self.objects if obj["geom_id"] == g1), None)
             vel2_id = next((obj["id"] for obj in self.objects if obj["geom_id"] == g2), None)
+
             vel1_pre = prev_frame.get(vel1_id, {}).get("velocity", [])
             vel2_pre = prev_frame.get(vel2_id, {}).get("velocity", [])
 
-            # Get joint addresses for post-collision velocities
-            adr1 = model.jnt_dofadr[
-                mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{g1}_free")
-            ]
-            adr2 = model.jnt_dofadr[
-                mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{g2}_free")
-            ]
-
-            # Extract post-collision velocities
-            vel1_post = data.qvel[adr1: adr1 + 3].tolist()
-            vel2_post = data.qvel[adr2: adr2 + 3].tolist()
+            vel1_post = current_objects.get(vel1_id, {}).get("velocity", [])
+            vel2_post = current_objects.get(vel2_id, {}).get("velocity", [])
+            
+            if not vel1_pre or not vel2_pre or not vel1_post or not vel2_post:
+                continue
 
             normal = normal / (np.linalg.norm(normal) + 1e-6)
 
@@ -173,7 +168,7 @@ class PhysicsTaxonomy:
 
         results = {obj["id"]: [] for obj in self.objects}
         dt = max(dt, 1e-6)  # division by zero
-        collision_results = self.detect_collision(model, data, prev_frame)
+        collision_results = self.detect_collision(model, data, prev_frame, current_objects)
 
         for obj in self.objects:
             object_id = obj["id"]
