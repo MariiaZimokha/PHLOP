@@ -81,8 +81,8 @@ class QuestionAnswers:
 
                 for item in obj.get("taxonomy", []):
                     if item.get("subcategory") == "Collision":
-                        self._process_collision(frame_idx, obj_id, obj_description, mass,
-                                                velocity, time, collisions, questions_answers)
+                        questions_answers.extend(self._process_collision(
+                            frame_idx, obj_id, obj_description, mass, velocity, time, collisions))
 
                     for label in item.get("labels", []):
                         if label == "Decelerating":
@@ -90,14 +90,14 @@ class QuestionAnswers:
                         elif label == "Accelerating":
                             accelerating_objects.add(obj_description)
 
-        self._add_general_questions(questions_answers, collisions, decelerating_objects, accelerating_objects,
-                                    heaviest_object, max_mass, highest_friction_object, max_friction,
-                                    highest_density_object, max_density)
+        questions_answers.extend(self._add_general_questions(collisions, decelerating_objects, accelerating_objects,
+                                                             heaviest_object, max_mass, highest_friction_object, max_friction, highest_density_object, max_density))
 
         return questions_answers
 
     def _process_collision(self, frame_idx: int, obj_id: str, obj_description: str, mass: float, velocity: List[float],
-                           time: float, collisions: List, questions_answers: List[Tuple[str, str]]):
+                           time: float, collisions: List):
+        questions_answers = []
         prev_frame = self.data.get("frames")[frame_idx - 1].get("objects", {})
         previous_velocity = prev_frame.get(obj_id, {}).get("velocity", [])
 
@@ -128,13 +128,15 @@ class QuestionAnswers:
                                 (f"What happened during the inelastic collision involving {obj_description} at time {time} s?",
                                  f"{obj_description} is losing some kinetic energy.")
                             )
+        return questions_answers
 
-    def _add_general_questions(self, questions_answers: List[Tuple[str, str]], collisions: List,
+    def _add_general_questions(self, collisions: List,
                                decelerating_objects: Set[str], accelerating_objects: Set[str],
                                heaviest_object: str, max_mass: float, highest_friction_object: str, max_friction: float,
                                highest_density_object: str, max_density: float):
+        questions_answers = []
         if collisions:
-            self._add_collision_questions(questions_answers, collisions)
+            questions_answers.extend(self._add_collision_questions(collisions))
 
         if decelerating_objects:
             questions_answers.append(
@@ -165,10 +167,11 @@ class QuestionAnswers:
                 ("Which object had the highest density?",
                  f"{highest_density_object} with a density of {max_density} kg/m³.")
             )
+        return questions_answers
 
-    def _add_collision_questions(self, questions_answers: List[Tuple[str, str]], collisions: List):
+    def _add_collision_questions(self, collisions: List):
         colliding_objects = {obj_desc for _, obj_desc, _, _, _, _, _ in collisions}
-
+        questions_answers = []
         questions_answers.extend([
             ("How many objects were involved in collisions?",
              f"{len(colliding_objects)} objects were involved in collisions."),
@@ -187,3 +190,4 @@ class QuestionAnswers:
                  f"The object {obj_desc} velocity changed by {delta_v:.3f} m/s at time {time} s.")
             ])
 
+        return questions_answers
