@@ -126,16 +126,16 @@ class Object:
             dimensions = {"radius": radius}
         elif shape == "cylinder":
             radius = random.uniform(0.05, 0.1)
-            height = random.uniform(0.1, 0.2)
+            height = random.uniform(0.01, 0.2)
             volume = np.pi * (radius**2) * height
             dimensions = {"radius": radius, "height": height}
         elif shape == "cube":
-            side = random.uniform(0.1, 0.3)
+            side = random.uniform(0.05, 0.1)
             volume = side**3
             dimensions = {"side": side}
         else:  # "block"
-            length = random.uniform(0.1, 0.2)
-            width = random.uniform(0.05, 0.2)
+            length = random.uniform(0.01, 0.1)
+            width = random.uniform(0.05, 0.1)
             height = random.uniform(0.05, 0.1)
             volume = length * width * height
             dimensions = {"length": length, "width": width, "height": height}
@@ -146,7 +146,7 @@ class Object:
 
         # Random velocities
         linear_velocity = np.random.uniform(-5, 5, size=3)
-        angular_velocity = np.random.uniform(-20, 20, size=3)
+        angular_velocity = np.random.uniform(-5, 5, size=3)
 
         return {
             "shape": shape,

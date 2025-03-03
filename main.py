@@ -1,7 +1,10 @@
+from dataset.question_answer import QuestionAnswers
 from dataset.object import Object
 from dataset.annotator import Annotator
 from dataset.video_annotation_visualizer import VideoAnnotationVisualizer
 from dataset.simulator import Simulation
+from dataset.utils import save_file
+from dataset.video_qa import add_qa_to_video
 
 import random
 import os
@@ -24,3 +27,11 @@ video_annotator.annotate(
     video_path=video_file,
     annotated_video_path=f"{path}output_video_{num_objects}.mp4",
 )
+
+q = QuestionAnswers(file_path)
+questions_answers = q.get_questions_answers()
+qa_file = f"{path}questions_answers.json"
+print(f'save to {qa_file}')
+save_file(qa_file, questions_answers)
+
+add_qa_to_video(questions_answers, file_path, path, num_objects)

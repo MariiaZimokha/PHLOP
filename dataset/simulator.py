@@ -11,73 +11,64 @@ from dataset.camera import CameraSettings
 
 
 class Simulation:
-    def __init__(self, world_object, width=1440, height=1024, annotator=None):
+    def __init__(self, world_object, width=1920, height=1088, annotator=None):
         self.obj = world_object
         self.width, self.height = width, height
         self.modes = ["collision", "sliding", "stationary", "offset"]
         self.annotator = annotator
         self.camera_settings = CameraSettings()
+        self.seg_color_map = {}
 
+        # XML template for the MuJoCo simulation
         self.header = f"""
 <mujoco model="dynamic_objects">
     <size nconmax="200" njmax="200"/>
     <option timestep="0.0005" gravity="0 0 -9.81"/>
     <visual>
-        <global offwidth="{self.width}" offheight="{self.height}"/>
+        <global offwidth="{self.width}" offheight="{self.height}" />
     </visual>"""
 
-        # Give the floor group="0" so that it is excluded from the object segmentation mask.
         self.world_body_start = """
-        <worldbody>
-            <light name="light" pos="0 0 3"/>
-             <geom name="floor" type="plane" 
-                  size="50 50 0.1" 
-                  pos="0 0 0" 
-                  rgba="1 1 1 1"
-                  friction="0.05 0.3 0.5" 
-                  group="0"
-                  material="floor_mat"/>
-        """
+    <worldbody>
+        <light name="light" pos="0 0 3"/>
+        <geom name="floor" type="plane" 
+              size="50 50 0.1" 
+              pos="0 0 0" 
+              rgba="1 1 1 1"
+              friction="0.05 0.3 0.5" 
+              group="0"
+              material="floor_mat"/>
+    """
         self.world_body_end = """
-            <camera name="camera" pos="0 -2 1" xyaxes="0.8944 0 0 0 0.4472 0.8944"/>
-        </worldbody>
-        </mujoco>"""
-
-        self.seg_color_map = {}
+        <camera name="camera" pos="0 -2 1" xyaxes="0.8944 0 0 0 0.4472 0.8944"/>
+    </worldbody>
+</mujoco>"""
 
     def __get_mode(self, weights=(0.4, 0.2, 0.2, 0.2)):
         return random.choices(self.modes, weights=weights, k=1)[0]
 
     def __convert_segmentation_to_mask(self, seg_frame):
-        # The red channel
-        seg_ids = seg_frame[:, :, 0]
-
+        """Convert segmentation IDs to a colored mask."""
+        seg_ids = seg_frame[:, :, 0]  # Red channel contains segmentation IDs
         mask = np.zeros((seg_frame.shape[0], seg_frame.shape[1], 3), dtype=np.uint8)
         unique_ids = np.unique(seg_ids)
 
         for geom_id in unique_ids:
-            # If we haven't assigned a color yet, do so:
             if geom_id not in self.seg_color_map:
-                if geom_id == 0:
-                    self.seg_color_map[geom_id] = [0, 0, 0]  # floor
-                else:
-                    self.seg_color_map[geom_id] = np.random.randint(
-                        0, 255, size=3
-                    ).tolist()
-
-            color = self.seg_color_map[geom_id]
-            mask[seg_ids == geom_id] = color
+                self.seg_color_map[geom_id] = (
+                    [0, 0, 0] if geom_id == 0  # floor
+                    else np.random.randint(0, 255, size=3).tolist()  # random color
+                )
+            mask[seg_ids == geom_id] = self.seg_color_map[geom_id]
 
         return mask
 
     def __get_world_objects(self, num_objects=3):
+        """Generate a list of objects with random properties."""
         objects = []
-        for i in range(num_objects):
-            # Retrieve random object params
+        for _ in range(num_objects):
             obj = self.obj.get_object()
             obj["mode"] = self.__get_mode()
-
-            # Position and velocity initialization based on mode
             obj = set_position_and_velocity(obj)
             obj = set_physics_properties(obj)
             objects.append(obj)
@@ -86,6 +77,7 @@ class Simulation:
     def __build_assets_and_bodies(self, objects):
         asset_defs = []
         bodies_xml = []
+
         for i, obj in enumerate(objects):
             mat_name = f"mat_obj{i}"
             asset_defs.append(
@@ -100,6 +92,7 @@ class Simulation:
                           friction="{obj['friction']}" material="{mat_name}" group="1"/>
                 </body>"""
             )
+
         asset_defs.append(
             """<material name="floor_mat" specular="0.0" shininess="0.0" rgba="0.8 0.8 0.8 1.0" />"""
         )
@@ -107,20 +100,15 @@ class Simulation:
 
     def __detect_collisions(self, model, data):
         colliding_pairs = set()
-
-        # data.ncon is the number of contacts at this moment
         for i in range(data.ncon):
             c = data.contact[i]
-            # print("contact", c)
-            g1 = c.geom1
-            g2 = c.geom2
-            pair = tuple(sorted((g1, g2)))
-            colliding_pairs.add(pair)
-
+            g1, g2 = c.geom1, c.geom2
+            if g1 != 0 and g2 != 0:  # skip floor collisions
+                colliding_pairs.add(tuple(sorted((g1, g2))))
         return colliding_pairs
 
     def run_simulation(
-        self, num_objects=3, objects=[], duration=5.0, framerate=30, camera={}, path=""
+        self, num_objects=3, objects=None, duration=5.0, framerate=25, camera=None, path=""
     ):
         """
         camera:
@@ -128,14 +116,12 @@ class Simulation:
                 0 - static
                 1 - dynamic
         """
-        cam = camera.get("mode", 0)
-        cam_init = camera.get("init", {})
-
-        if not len(objects):
+        if objects is None:
             objects = self.__get_world_objects(num_objects)
+        if camera is None:
+            camera = {"mode": 0, "init": {}}
 
         num_objects = len(objects)
-
         asset_defs, bodies_xml = self.__build_assets_and_bodies(objects)
 
         simulation_xml = (
@@ -146,30 +132,34 @@ class Simulation:
             f"{self.world_body_end}"
         )
 
-        # Build and run the MuJoCo simulation
+        # Initialize MuJoCo model and data
         model = mujoco.MjModel.from_xml_string(simulation_xml)
         data = mujoco.MjData(model)
 
-        # camera_settings = CameraSettings(model, data)
-        print(self.camera_settings)
+        # Configure camera
         self.camera_settings.set_model(model, data)
-        self.camera_settings.set_init_settings(cam_init)
+        self.camera_settings.set_init_settings(camera.get("init", {}))
         camera_init_config = self.camera_settings.get_init_settings()
 
-        # set init velocity and map object for segmentation
+        # Initialize object velocities and IDs
         for i, obj in enumerate(objects):
-            joint_id = mujoco.mj_name2id(
-                model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free"
-            )
+            joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free")
             adr = model.jnt_dofadr[joint_id]
-            data.qvel[adr : adr + 6] = [*obj["velocity"], *obj["angular_velocity"]]
+            data.qvel[adr: adr + 6] = [*obj["velocity"], *obj["angular_velocity"]]
 
-            geom_name = f"geom_obj{i}"
-            geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
+            geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, f"geom_obj{i}")
             objects[i]["geom_id"] = geom_id
             objects[i]["id"] = f"geom_obj{i}"
 
         physics = PhysicsTaxonomy(objects)
+        prev_frame_data = {
+            obj["id"]: {
+                "velocity": [float(x) for x in obj["velocity"]],
+                "angular_velocity": [float(x) for x in obj["angular_velocity"]],
+                "position": [obj["init_possition_x"], obj["init_possition_y"], obj["base_z"]],
+            }
+            for obj in objects
+        }
 
         normal_frames = []
         segmentation_frames = []
@@ -179,80 +169,71 @@ class Simulation:
         with mujoco.Renderer(model, self.height, self.width) as renderer:
             renderer.enable_segmentation_rendering()
             while data.time < duration:
-                dt = data.time - prev_time
-                prev_time = data.time
 
                 mujoco.mj_step(model, data)
 
                 if len(normal_frames) < data.time * framerate:
-                    if cam == 1:
+                    if camera["mode"] == 1:
                         self.camera_settings.update_camera(num_objects, renderer)
 
-                    # Render the normal frame (disable segmentation).
+                    # Render normal frame
                     renderer.disable_segmentation_rendering()
                     renderer.update_scene(data, camera=self.camera_settings.camera)
-                    # renderer.update_scene(data, camera="top")
-                    normal_frame = renderer.render()
-                    normal_frames.append(normal_frame)
+                    normal_frames.append(renderer.render())
 
-                    # Render the segmentation frame (enable segmentation).
+                    # Render segmentation frame
                     renderer.enable_segmentation_rendering()
-                    renderer.update_scene(data, camera=self.camera_settings.camera)
-                    # renderer.update_scene(data, camera="top")
                     seg_frame = renderer.render()
+                    segmentation_frames.append(self.__convert_segmentation_to_mask(seg_frame))
 
-                    mask = self.__convert_segmentation_to_mask(seg_frame)
-                    segmentation_frames.append(mask)
-
-                    annotation = self.annotator.get_annotation(
-                        seg_frame, objects, data, model
-                    )
-                    # print(annotation)
+                    # Generate annotations
+                    annotation = self.annotator.get_annotation(seg_frame, objects, data, model)
                     pairs = self.__detect_collisions(model, data)
-                    events = physics.get_taxonomy(model, data, dt)
-                    # print("taxonomy ",events)
-                    # print(annotation["objects"].keys())
-                    # print(events.keys())
-                    # print(events)
-                    annotation_all = {}
-                    for object_id in set(annotation["objects"].keys()).union(
-                        events.keys()
-                    ):
-                        # print(object_id)
-                        # print('events ', events[object_id])
-                        annotation_all[object_id] = {
-                            **annotation["objects"].get(object_id, {}),
-                            "taxonomy": events.get(object_id, {}),
+                    current_time = data.time
+                    dt = current_time - prev_time
+                    # df = 1.0 / framerate
+                    prev_time = current_time
+                    events = physics.get_taxonomy(model, data, dt, prev_frame_data, annotation["objects"])
+
+                    annotation_all = {
+                        obj_id: {
+                            **annotation["objects"].get(obj_id, {}),
+                            "taxonomy": events.get(obj_id, {}),
+                            "prev_data": prev_frame_data.get(obj_id, {}),
+                        }
+                        for obj_id in set(annotation["objects"].keys()).union(events.keys())
+                    }
+
+                    annotation_frames.append({
+                        "time": current_time,
+                        "objects": annotation_all,
+                        "interactions": pairs,
+                    })
+
+                    # Update previous frame data
+                    for i, obj in enumerate(objects):
+                        obj_id = obj["id"]
+                        joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free")
+                        adr = model.jnt_dofadr[joint_id]
+                        prev_frame_data[obj_id] = {
+                            "velocity": [float(x) for x in data.qvel[adr: adr + 3].tolist()],
+                            "angular_velocity": [float(x) for x in data.qvel[adr + 3: adr + 6].tolist()],
+                            "position": data.qpos[adr: adr + 3].tolist(),
                         }
 
-                    annotation_frames.append(
-                        {
-                            "time": data.time,
-                            "objects": annotation_all,
-                            "interations": pairs,
-                        }
-                    )
-
-        # Save the normal and segmentation videos.
         normal_video_filename = f"{path}simulation_{num_objects}_objects.mp4"
-        segmentation_video_filename = (
-            f"{path}simulation_{num_objects}_objects_segmentation.mp4"
-        )
-
-        imageio.mimsave(normal_video_filename, normal_frames, fps=framerate)
-        print(f"Normal video saved as {normal_video_filename}")
-
+        segmentation_video_filename = f"{path}simulation_{num_objects}_objects_segmentation.mp4"
+        imageio.mimsave(normal_video_filename, normal_frames, fps=framerate, codec='libx264')
         imageio.mimsave(segmentation_video_filename, segmentation_frames, fps=framerate)
-        print(f"Segmentation video saved as {segmentation_video_filename}")
 
         data = {
             "camera": camera_init_config,
             "objects": objects,
             "frames": annotation_frames,
         }
-
         file_path = f"{path}obj_{num_objects}.json"
         save_file(file_path, data)
+
         return {
             "video_file": normal_video_filename,
             "segmentation_video_filename": segmentation_video_filename,
