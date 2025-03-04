@@ -21,25 +21,65 @@ class Object:
                 "friction_dist_lateral": [(0.28, 0.02, 0.5), (0.32, 0.02, 0.5)],
             },
             "wood": {
-                "elasticity": 0.4,
-                "density": 600,
-                "friction": "0.5",
+                "elasticity_dist": [(0.35, 0.05, 0.6), (0.45, 0.05, 0.4)],
+                "density_dist": [
+                    (500, 50, 0.4),  # Softwoods
+                    (600, 50, 0.3),  # Hardwoods
+                    (700, 50, 0.3),  # Dense hardwoods
+                ],
+                "friction_dist_lateral": [(0.45, 0.05, 0.6), (0.55, 0.05, 0.4)],
             },
+
             "rubber": {
-                "elasticity": 0.95,
-                "density": 1100,
-                "friction": "1.0",
+                "elasticity_dist": [(0.90, 0.05, 0.7), (0.98, 0.05, 0.3)],
+                "density_dist": [
+                    (900, 50, 0.4),  # Natural rubber
+                    (1100, 50, 0.3),  # Synthetic rubber
+                    (1200, 50, 0.3),  # High-density rubber
+                ],
+                "friction_dist_lateral": [(0.9, 0.05, 0.7), (1.1, 0.05, 0.3)],
             },
             "glass": {
-                "elasticity": 0.6,
-                "density": 2500,
-                "friction": "0.2",
+                "elasticity_dist": [(0.55, 0.05, 0.6), (0.65, 0.05, 0.4)],
+                "density_dist": [
+                    (2400, 50, 0.5),  # Soda-lime glass
+                    (2500, 50, 0.3),  # Borosilicate glass
+                    (2600, 50, 0.2),  # Lead glass
+                ],
+                "friction_dist_lateral": [(0.18, 0.02, 0.6), (0.22, 0.02, 0.4)],
             },
+
             "plastic": {
-                "elasticity": 0.7,
-                "density": 1200,
-                "friction": "0.4",
+                "elasticity_dist": [(0.65, 0.05, 0.5), (0.75, 0.05, 0.5)],
+                "density_dist": [
+                    (1000, 50, 0.3),  # Low-density polyethylene
+                    (1200, 50, 0.3),  # Polypropylene
+                    (1400, 50, 0.2),  # High-density polyethylene
+                    (1800, 50, 0.2),  # Polycarbonate
+                ],
+                "friction_dist_lateral": [(0.35, 0.05, 0.5), (0.45, 0.05, 0.5)],
             },
+
+            # "wood": {
+            #     "elasticity": 0.4,
+            #     "density": 600,
+            #     "friction": "0.5",
+            # },
+            # "rubber": {
+            #     "elasticity": 0.95,
+            #     "density": 1100,
+            #     "friction": "1.0",
+            # },
+            # "glass": {
+            #     "elasticity": 0.6,
+            #     "density": 2500,
+            #     "friction": "0.2",
+            # },
+            # "plastic": {
+            #     "elasticity": 0.7,
+            #     "density": 1200,
+            #     "friction": "0.4",
+            # },
         }
 
         self.material_visuals = {
@@ -105,17 +145,12 @@ class Object:
 
         mixture_data = self.material_mixtures[material]
 
-        if material == "metal":
-            elasticity_val = self.__sample_from_mixture(mixture_data["elasticity_dist"])
-            density_val = self.__sample_from_mixture(mixture_data["density_dist"])
+        elasticity_val = self.__sample_from_mixture(mixture_data["elasticity_dist"])
+        density_val = self.__sample_from_mixture(mixture_data["density_dist"])
             friction_lateral = self.__sample_from_mixture(
                 mixture_data["friction_dist_lateral"]
             )
-            friction_str = f"{friction_lateral:.2f}"
-        else:
-            elasticity_val = mixture_data["elasticity"]
-            density_val = mixture_data["density"]
-            friction_str = mixture_data["friction"]
+        friction_str = f"{friction_lateral:.2f}"
 
         visual = self.__get_visual(material)
 

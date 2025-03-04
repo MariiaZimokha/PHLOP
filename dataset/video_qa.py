@@ -12,9 +12,10 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
 
     with open(json_file, 'r') as f:
         sim_data = json.load(f)
-    print("Simulation JSON keys:", sim_data.keys())
+    # print("Simulation JSON keys:", sim_data.keys())
 
-    video_path = f"{path}output_video_{num_objects}.mp4"
+    video_path = f"{path}output_video.mp4"
+    # video_path = f"{path}output_video_{num_objects}.mp4"
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print("Error opening video file.")
@@ -144,4 +145,4 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
             out.write(qa_frame)
 
     out.release()
-    print("Output video saved as", output_path)
+    # print("Output video saved as", output_path)
