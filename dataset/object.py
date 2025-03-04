@@ -59,27 +59,6 @@ class Object:
                 ],
                 "friction_dist_lateral": [(0.35, 0.05, 0.5), (0.45, 0.05, 0.5)],
             },
-
-            # "wood": {
-            #     "elasticity": 0.4,
-            #     "density": 600,
-            #     "friction": "0.5",
-            # },
-            # "rubber": {
-            #     "elasticity": 0.95,
-            #     "density": 1100,
-            #     "friction": "1.0",
-            # },
-            # "glass": {
-            #     "elasticity": 0.6,
-            #     "density": 2500,
-            #     "friction": "0.2",
-            # },
-            # "plastic": {
-            #     "elasticity": 0.7,
-            #     "density": 1200,
-            #     "friction": "0.4",
-            # },
         }
 
         self.material_visuals = {
@@ -148,8 +127,8 @@ class Object:
         elasticity_val = self.__sample_from_mixture(mixture_data["elasticity_dist"])
         density_val = self.__sample_from_mixture(mixture_data["density_dist"])
         friction_lateral = self.__sample_from_mixture(
-                mixture_data["friction_dist_lateral"]
-            )
+            mixture_data["friction_dist_lateral"]
+        )
         friction_str = f"{friction_lateral:.2f}"
 
         visual = self.__get_visual(material)

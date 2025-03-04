@@ -19,7 +19,6 @@ sim = Simulation(obj, annotator=annotator, width=width, height=height)
 
 for i in tqdm(range(20)):
     num_objects = random.randrange(2, 15)
-    # path = f"generated/{num_objects}/"
     path = f"generated/{i}/"
 
     if not os.path.exists(path):
@@ -31,13 +30,11 @@ for i in tqdm(range(20)):
         file_path=file_path,
         video_path=video_file,
         annotated_video_path=f"{path}output_video.mp4",
-        # annotated_video_path=f"{path}output_video_{num_objects}.mp4",
     )
 
     q = QuestionAnswers(file_path)
     questions_answers = q.get_questions_answers()
     qa_file = f"{path}questions_answers.json"
-    # print(f'save to {qa_file}')
     save_file(qa_file, questions_answers)
 
     add_qa_to_video(questions_answers, file_path, path, num_objects)

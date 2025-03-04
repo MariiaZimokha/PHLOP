@@ -221,8 +221,6 @@ class Simulation:
                             "position": data.qpos[adr: adr + 3].tolist(),
                         }
 
-        # normal_video_filename = f"{path}simulation_{num_objects}_objects.mp4"
-        # segmentation_video_filename = f"{path}simulation_{num_objects}_objects_segmentation.mp4"
         normal_video_filename = f"{path}simulation_objects.mp4"
         segmentation_video_filename = f"{path}simulation_objects_segmentation.mp4"
         imageio.mimsave(normal_video_filename, normal_frames, fps=framerate, codec='libx264')
@@ -234,7 +232,6 @@ class Simulation:
             "frames": annotation_frames,
         }
         file_path = f"{path}obj.json"
-        # file_path = f"{path}obj_{num_objects}.json"
         save_file(file_path, data)
 
         return {
