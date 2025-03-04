@@ -7,6 +7,8 @@ from typing import List, Tuple, Dict, Set
 class QuestionAnswers:
     def __init__(self, file_path: str):
         self.data = self.read_file(file_path)
+        self.taxonomy_labels = self._extract_all_taxonomy_labels()
+        self.object_states = self._calculate_object_states()
 
     def read_file(self, path: str) -> Dict:
         with open(path) as f:
@@ -35,11 +37,111 @@ class QuestionAnswers:
         velocity_magnitude = np.linalg.norm(velocity)
         return round(0.5 * mass * (velocity_magnitude ** 2), 3)
 
+    def _extract_all_taxonomy_labels(self) -> Set[str]:
+        labels = set()
+        for frame in self.data.get("frames", []):
+            for obj_id, obj in frame.get("objects", {}).items():
+                for item in obj.get("taxonomy", []):
+                    labels.update(item.get("labels", []))
+        return labels
+
+    def _calculate_object_states(self) -> Dict[str, Dict[str, float]]:
+        object_states = {}
+        prev_time = 0.0
+
+        for frame in self.data.get("frames", []):
+            current_time = frame.get("time", 0.0)
+            time_delta = current_time - prev_time
+            prev_time = current_time
+
+            for obj_id, obj in frame.get("objects", {}).items():
+                if obj_id not in object_states:
+                    object_states[obj_id] = {
+                        "accelerating": 0.0,
+                        "decelerating": 0.0,
+                        "stationary": 0.0,
+                        # "tipped": 0.0,
+                        "sliding": 0.0,
+                        "collision": 0.0,
+                    }
+
+                for item in obj.get("taxonomy", []):
+                    for label in item.get("labels", []):
+                        if label == "Accelerating":
+                            object_states[obj_id]["accelerating"] += time_delta
+                        elif label == "Decelerating":
+                            object_states[obj_id]["decelerating"] += time_delta
+                        elif label == "Stationary":
+                            object_states[obj_id]["stationary"] += time_delta
+                        # elif label == "Tipped":
+                        #     object_states[obj_id]["tipped"] += time_delta
+                        elif label == "Sliding":
+                            object_states[obj_id]["sliding"] += time_delta
+                        elif label == "Collision":
+                            object_states[obj_id]["collision"] += time_delta
+
+        return object_states
+
+    def _compare_object_states(self) -> List[Tuple[str, str]]:
+        """Generate questions comparing the time objects spent in different states."""
+        questions_answers = []
+
+        # Get the total time of the simulation
+        total_time = self.data.get("frames", [])[-1].get("time", 0.0)
+
+        # Compare time spent in different states
+        for obj_id, states in self.object_states.items():
+            obj_description = self._get_object_description(obj_id)
+            if not obj_description:
+                continue
+
+            # Compare time spent in each state
+            for state, time_spent in states.items():
+                percentage = (time_spent / total_time) * 100
+                questions_answers.append(
+                    (f"What percentage of the simulation did {obj_description} spend {state}?",
+                     f"{obj_description} spent {round(percentage, 2)}% of the simulation {state}.")
+                )
+
+            # Compare relative time spent in different states
+            if states["accelerating"] > states["decelerating"]:
+                questions_answers.append(
+                    (f"Did {obj_description} spend more time accelerating or decelerating?",
+                     f"{obj_description} spent more time accelerating than decelerating.")
+                )
+            elif states["decelerating"] > states["accelerating"]:
+                questions_answers.append(
+                    (f"Did {obj_description} spend more time accelerating or decelerating?",
+                     f"{obj_description} spent more time decelerating than accelerating.")
+                )
+
+            if states["stationary"] > 0:
+                questions_answers.append(
+                    (f"Did {obj_description} spend any time stationary?",
+                     f"Yes, {obj_description} spent {round(states['stationary'], 2)} seconds stationary.")
+                )
+            else:
+                questions_answers.append(
+                    (f"Did {obj_description} spend any time stationary?",
+                     f"No, {obj_description} did not spend any time stationary.")
+                )
+
+        return questions_answers
+
+    def _get_object_description(self, obj_id: str) -> str:
+        """Get a description of the object based on its ID."""
+        for obj in self.data.get("objects", []):
+            if obj.get("id") == obj_id:
+                closest_color, _ = self.rgba_to_text(obj.get("visual", {}).get("rgba", ""))
+                return f"{closest_color} {obj.get('material', 'unknown_material')} {obj.get('geom_type', 'unknown_geom_type')}"
+        return ""
+
     def get_questions_answers(self) -> List[Tuple[str, str]]:
         questions_answers = []
         collisions = []
         decelerating_objects = set()
         accelerating_objects = set()
+        taxonomy_events = {}
 
         heaviest_object = ""
         max_mass = 0
@@ -80,23 +182,35 @@ class QuestionAnswers:
                     highest_density_object = obj_description
 
                 for item in obj.get("taxonomy", []):
-                    if item.get("subcategory") == "Collision":
-                        questions_answers.extend(self._process_collision(
-                            frame_idx, obj_id, obj_description, mass, velocity, time, collisions))
-
+                    category = item.get("category", "")
+                    subcategory = item.get("subcategory", "")
                     for label in item.get("labels", []):
+                        if (category, subcategory, label) not in taxonomy_events:
+                            taxonomy_events[(category, subcategory, label)] = set()
+                        taxonomy_events[(category, subcategory, label)].add(obj_description)
+
+                        if subcategory == "Collision":
+                            questions_answers.extend(self._process_collision(
+                                frame_idx, obj_id, obj_description, mass, velocity, collisions))
+
                         if label == "Decelerating":
                             decelerating_objects.add(obj_description)
                         elif label == "Accelerating":
                             accelerating_objects.add(obj_description)
 
         questions_answers.extend(self._add_general_questions(collisions, decelerating_objects, accelerating_objects,
-                                                             heaviest_object, max_mass, highest_friction_object, max_friction, highest_density_object, max_density))
+                                                             heaviest_object, max_mass, highest_friction_object, max_friction, highest_density_object, max_density, taxonomy_events))
+
+        # Add questions comparing object states
+        questions_answers.extend(self._compare_object_states())
+
+        # Add taxonomy-based questions
+        questions_answers.extend(self._add_taxonomy_based_questions(taxonomy_events))
 
         return questions_answers
 
     def _process_collision(self, frame_idx: int, obj_id: str, obj_description: str, mass: float, velocity: List[float],
-                           time: float, collisions: List):
+                           collisions: List):
         questions_answers = []
         prev_frame = self.data.get("frames")[frame_idx - 1].get("objects", {})
         previous_velocity = prev_frame.get(obj_id, {}).get("velocity", [])
@@ -106,34 +220,34 @@ class QuestionAnswers:
             previous_velocity = np.array(previous_velocity)
             delta_v = np.linalg.norm(current_velocity - previous_velocity)
 
-            collisions.append((obj_id, obj_description, mass, previous_velocity, velocity, time, delta_v))
+            collisions.append((obj_id, obj_description, mass, previous_velocity, velocity, delta_v))
 
             # Add kinetic energy question
             questions_answers.append(
-                (f"What was the kinetic energy of the {obj_description} before the collision at time {time} s?",
+                (f"What was the kinetic energy of the {obj_description} before the collision?",
                  f"The kinetic energy of the {obj_description} before the collision was {self.calculate_kinetic_energy(mass, previous_velocity)} J (Joules).")
             )
 
             # Add collision type questions
-            for label in self.data.get("frames")[frame_idx].get("objects", {}).get(obj_id, {}).get("taxonomy", []):
-                if label.get("subcategory") == "Collision":
-                    for collision_label in label.get("labels", []):
-                        if collision_label == "Elastic Collision":
+            for item in self.data.get("frames")[frame_idx].get("objects", {}).get(obj_id, {}).get("taxonomy", []):
+                if item.get("subcategory") == "Collision":
+                    for label in item.get("labels", []):
+                        if label == "Elastic Collision":
                             questions_answers.append(
-                                (f"What happened during the elastic collision involving {obj_description} at time {time} s?",
-                                 f"{obj_description} is conserving both momentum and kinetic energy.")
+                                (f"What happened during the elastic collision involving {obj_description}?",
+                                 f"{obj_description} conserved both momentum and kinetic energy.")
                             )
-                        elif collision_label == "Inelastic Collision":
+                        elif label == "Inelastic Collision":
                             questions_answers.append(
-                                (f"What happened during the inelastic collision involving {obj_description} at time {time} s?",
-                                 f"{obj_description} is losing some kinetic energy.")
+                                (f"What happened during the inelastic collision involving {obj_description}?",
+                                 f"{obj_description} lost some kinetic energy.")
                             )
         return questions_answers
 
     def _add_general_questions(self, collisions: List,
                                decelerating_objects: Set[str], accelerating_objects: Set[str],
                                heaviest_object: str, max_mass: float, highest_friction_object: str, max_friction: float,
-                               highest_density_object: str, max_density: float):
+                               highest_density_object: str, max_density: float, taxonomy_events: Dict):
         questions_answers = []
         if collisions:
             questions_answers.extend(self._add_collision_questions(collisions))
@@ -170,7 +284,7 @@ class QuestionAnswers:
         return questions_answers
 
     def _add_collision_questions(self, collisions: List):
-        colliding_objects = {obj_desc for _, obj_desc, _, _, _, _, _ in collisions}
+        colliding_objects = {obj_desc for _, obj_desc, _, _, _, _ in collisions}
         questions_answers = []
         questions_answers.extend([
             ("How many objects were involved in collisions?",
@@ -181,13 +295,22 @@ class QuestionAnswers:
 
         if collisions:
             most_velocity_loss_collision = max(collisions, key=lambda x: x[-1])
-            obj_id, obj_desc, mass, prev_velocity, velocity, time, delta_v = most_velocity_loss_collision
+            obj_id, obj_desc, mass, prev_velocity, velocity, delta_v = most_velocity_loss_collision
 
             questions_answers.extend([
                 ("Which object lost the most velocity after the collisions?",
                  f"The object {obj_desc} lost the most velocity with a change of {delta_v:.3f} m/s."),
-                (f"At time {time} s, what was the velocity change during collision for object {obj_desc}?",
-                 f"The object {obj_desc} velocity changed by {delta_v:.3f} m/s at time {time} s.")
             ])
 
+        return questions_answers
+
+    def _add_taxonomy_based_questions(self, taxonomy_events: Dict) -> List[Tuple[str, str]]:
+        """Generate questions based on the extracted taxonomy events (category, subcategory, and labels)."""
+        questions_answers = []
+        for (category, subcategory, label), objects in taxonomy_events.items():
+            objects_str = ", ".join(objects)
+            questions_answers.append(
+                (f"Which objects experienced the {category} event '{label}' under the subcategory '{subcategory}'?",
+                 f"The following objects experienced the {category} event '{label}' under the subcategory '{subcategory}': {objects_str}.")
+            )
         return questions_answers
