@@ -8,3 +8,4 @@ glfw
 imageio
 imageio[ffmpeg]
 pyopengl
+tqdm

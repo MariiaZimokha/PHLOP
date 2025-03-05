@@ -123,4 +123,4 @@ class VideoAnnotationVisualizer:
         cap.release()
         out.release()
         cv2.destroyAllWindows()
-        print(f"Annotated video - {annotated_video_path}")
+        # print(f"Annotated video - {annotated_video_path}")
