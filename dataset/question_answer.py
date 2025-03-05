@@ -201,11 +201,14 @@ class QuestionAnswers:
         questions_answers.extend(self._add_general_questions(collisions, decelerating_objects, accelerating_objects,
                                                              heaviest_object, max_mass, highest_friction_object, max_friction, highest_density_object, max_density, taxonomy_events))
 
-        # Add questions comparing object states
+        # add questions comparing object states
         questions_answers.extend(self._compare_object_states())
 
-        # Add taxonomy-based questions
+        # add taxonomy-based questions
         questions_answers.extend(self._add_taxonomy_based_questions(taxonomy_events))
+
+        # add what-if type of questions
+        questions_answers.extend(self._add_what_if_questions(objects_data, collisions))
 
         return questions_answers
 
@@ -313,4 +316,65 @@ class QuestionAnswers:
                 (f"Which objects experienced the {category} event '{label}' under the subcategory '{subcategory}'?",
                  f"The following objects experienced the {category} event '{label}' under the subcategory '{subcategory}': {objects_str}.")
             )
+        return questions_answers
+
+    def _add_what_if_questions(self, objects_data: Dict, collisions: List) -> List[Tuple[str, str]]:
+        questions_answers = []
+
+        if collisions:
+            obj_id, obj_desc, mass, prev_velocity, velocity, delta_v = collisions[0]
+
+            # mass doubled
+            questions_answers.append(
+                (f"What if the mass of {obj_desc} was doubled?",
+                 f"If the mass of {obj_desc} was doubled, its kinetic energy before the collision would be {self.calculate_kinetic_energy(2 * mass, prev_velocity)} J, and the collision impact would be greater.")
+            )
+
+            # velocity halved
+            questions_answers.append(
+                (f"What if the velocity of {obj_desc} was halved before the collision?",
+                 f"If the velocity of {obj_desc} was halved, its kinetic energy before the collision would be {self.calculate_kinetic_energy(mass, [v / 2 for v in prev_velocity])} J, and the collision impact would be significantly reduced.")
+            )
+
+            # elastic collision turned inelastic
+            questions_answers.append(
+                (f"What if the collision involving {obj_desc} was inelastic instead of elastic?",
+                 f"If the collision was inelastic, {obj_desc} would lose some kinetic energy, and the objects might stick together after the collision.")
+            )
+
+        if objects_data:
+            obj_id = next(iter(objects_data))
+            obj_data = objects_data[obj_id]
+            obj_desc = f"{self.rgba_to_text(obj_data.get('visual', {}).get('rgba', ''))[0]} {obj_data.get('material', 'unknown_material')} {obj_data.get('geom_type', 'unknown_geom_type')}"
+
+            # friction increased by 50%
+            questions_answers.append(
+                (f"What if the friction of {obj_desc} was increased by 50%?",
+                 f"If the friction of {obj_desc} was increased by 50%, it would decelerate faster and potentially reduce the distance it travels.")
+            )
+
+            # density doubled
+            questions_answers.append(
+                (f"What if the density of {obj_desc} was doubled?",
+                 f"If the density of {obj_desc} was doubled, its mass would increase proportionally (assuming volume remains constant), making it harder to accelerate or decelerate.")
+            )
+
+            # material changed to a more elastic one
+            questions_answers.append(
+                (f"What if {obj_desc} was made of a more elastic material?",
+                 f"If {obj_desc} was made of a more elastic material, it would rebound more after collisions, conserving more kinetic energy.")
+            )
+
+            # gravity was doubled
+            questions_answers.append(
+                (f"What if gravity was doubled in the simulation?",
+                 f"If gravity was doubled, all objects would accelerate faster toward the ground, and collisions would likely be more forceful.")
+            )
+
+            # air resistance was introduced
+            questions_answers.append(
+                (f"What if air resistance was introduced in the simulation?",
+                 f"If air resistance was introduced, lighter objects would decelerate more quickly, and their trajectories would be significantly affected.")
+            )
+
         return questions_answers
