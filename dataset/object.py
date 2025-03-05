@@ -133,7 +133,6 @@ class Object:
 
         visual = self.__get_visual(material)
 
-        # Dimension logic remains the same
         if shape == "ball":
             radius = random.uniform(0.05, 0.1)
             volume = (4 / 3) * np.pi * (radius**3)
@@ -158,7 +157,6 @@ class Object:
         raw_mass = density_val * volume
         mass_val = max(raw_mass, 1e-6)
 
-        # Random velocities
         linear_velocity = np.random.uniform(-5, 5, size=3)
         angular_velocity = np.random.uniform(-5, 5, size=3)
 

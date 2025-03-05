@@ -86,16 +86,16 @@ class QuestionAnswers:
         """Generate questions comparing the time objects spent in different states."""
         questions_answers = []
 
-        # Get the total time of the simulation
+        # the total time of the simulation
         total_time = self.data.get("frames", [])[-1].get("time", 0.0)
 
-        # Compare time spent in different states
+        # compare time spent in different states
         for obj_id, states in self.object_states.items():
             obj_description = self._get_object_description(obj_id)
             if not obj_description:
                 continue
 
-            # Compare time spent in each state
+            # compare time spent in each state
             for state, time_spent in states.items():
                 percentage = (time_spent / total_time) * 100
                 questions_answers.append(
@@ -103,7 +103,7 @@ class QuestionAnswers:
                      f"{obj_description} spent {round(percentage, 2)}% of the simulation {state}.")
                 )
 
-            # Compare relative time spent in different states
+            # compare relative time spent in different states
             if states["accelerating"] > states["decelerating"]:
                 questions_answers.append(
                     (f"Did {obj_description} spend more time accelerating or decelerating?",

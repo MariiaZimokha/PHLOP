@@ -70,7 +70,7 @@ class PhysicsTaxonomy:
             contact = data.contact[i]
             g1, g2 = contact.geom1, contact.geom2
 
-            # Skip if either geom is the world (geom_id = 0)
+            # Skip if either geom is the world (geom_id = 0) - floor
             if g1 == 0 or g2 == 0:
                 continue
 
@@ -92,11 +92,11 @@ class PhysicsTaxonomy:
             if not vel1_pre or not vel2_pre or not vel1_post or not vel2_post:
                 continue
 
-            # Calculate relative velocities before and after the collision
+            # relative velocities before and after the collision
             rel_vel_pre = np.dot((np.array(vel1_pre) - np.array(vel2_pre)), normal)
             rel_vel_post = np.dot((np.array(vel1_post) - np.array(vel2_post)), normal)
 
-            # Calculate elasticity ratio
+            # elasticity ratio
             elasticity_ratio = (
                 abs(rel_vel_post / rel_vel_pre) if rel_vel_pre != 0 else 0
             )

@@ -34,7 +34,6 @@ class Annotator:
 
     def get_bbox(self, seg_polygons=None):
         if seg_polygons:
-            # Ensure bounding boxes are created separately for each polygon (avoiding overlaps)
             bounding_boxes = [cv2.boundingRect(np.array(pg)) for pg in seg_polygons]
 
             # compute individual bbox per polygon
@@ -85,11 +84,10 @@ class Annotator:
             if is_stopped:
                 active_labels.append("Stopped")
 
-            # Tilt detection (for a free joint, orientation is in qpos[adr+3:adr+7] as a quaternion)
             quat = data.qpos[adr + 3: adr + 7]
             rot_mat = np.zeros((3, 3))
             mujoco.mju_quat2Mat(rot_mat.ravel(), quat)
-            # local z-axis is rot_mat[:,2], dot with global z-axis => cos(tilt)
+
             dot_val = np.clip(np.dot(rot_mat[:, 2], [0, 0, 1]), -1.0, 1.0)
             tilt_deg = np.degrees(np.arccos(dot_val))
             is_tipped = tilt_deg > TIP_ANGLE_THRESHOLD_DEG
@@ -102,7 +100,7 @@ class Annotator:
                 "active_labels": active_labels,
                 "position": position,
                 "bbox": bbox,
-                # "segment_polygons": [contour.tolist() for contour in seg_polygons],
+                "segment_polygons": [contour.tolist() for contour in seg_polygons],
             }
 
         return frame_annotation
