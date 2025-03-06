@@ -3,6 +3,7 @@ from collections import deque
 
 from dataset.physics_engine import PhysicsEngine
 
+
 class PhysicsTaxonomy:
     def __init__(self, objects):
         self.objects = objects

@@ -68,18 +68,18 @@ class PhysicsEngine:
           - "Friction Stop": When the object’s velocity is negligible.
           - "Sliding with Friction": When deceleration is consistent with friction.
           - "Sliding with Drag": When deceleration is consistent with drag force effects.
-    
+
         """
         velocity = np.array(velocity)
         acceleration = np.array(acceleration)
         vel_mag = np.linalg.norm(velocity)
         accel_mag = np.linalg.norm(acceleration)
-        
+
         # expected frictional deceleration
         expected_friction_accel = -friction_coefficient * self.gravity
 
-        if vel_mag == 0 and accel_mag == 0:
-            return "Friction Stop"
+        # if vel_mag == 0 and accel_mag == 0:
+        #     return "Friction Stop"
 
         if vel_mag <= self.velocity_threshold:
             return "Friction Stop"
