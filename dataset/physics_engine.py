@@ -42,7 +42,7 @@ class PhysicsEngine:
         Determines the rotational motion type:
           - Pure Rotation: When linear speed is near zero but angular speed is significant.
           - Rolling Motion: When v ≈ r * w.
-          - Rolling with Sliding: When linear speed deviates from r * w.
+          - Rolling with Slipping: When linear speed deviates from r * w.
         """
         angular_velocity = np.array(angular_velocity)
         linear_velocity = np.array(linear_velocity)
@@ -59,20 +59,27 @@ class PhysicsEngine:
         if abs(rolling_diff) < self.epsilon:
             return "Rolling Motion"
         if linear_mag > self.velocity_threshold and angular_mag > self.velocity_threshold:
-            return "Rolling with Sliding"
+            return "Rolling Motion with Slipping"
         return None
 
-    def detect_friction_event(self, velocity, acceleration, friction_coefficient):
+    def detect_friction_event(self, velocity, acceleration, friction_coefficient, drag_coefficient=None):
         """
         Detect friction-related events.
           - "Friction Stop": When the object’s velocity is negligible.
           - "Sliding with Friction": When deceleration is consistent with friction.
+          - "Sliding with Drag": When deceleration is consistent with drag force effects.
+    
         """
         velocity = np.array(velocity)
         acceleration = np.array(acceleration)
         vel_mag = np.linalg.norm(velocity)
         accel_mag = np.linalg.norm(acceleration)
+        
+        # expected frictional deceleration
         expected_friction_accel = -friction_coefficient * self.gravity
+
+        if vel_mag == 0 and accel_mag == 0:
+            return "Friction Stop"
 
         if vel_mag <= self.velocity_threshold:
             return "Friction Stop"
@@ -80,6 +87,13 @@ class PhysicsEngine:
         if accel_mag > self.acceleration_threshold and np.dot(velocity, acceleration) < 0:
             if np.isclose(accel_mag, abs(expected_friction_accel), atol=0.1):
                 return "Sliding with Friction"
+            # if drag-related deceleration.
+            if drag_coefficient is not None:
+                # air resistance at higher speeds
+                # deceleration scales with the square of the velocity.
+                expected_drag_accel = -drag_coefficient * (vel_mag ** 2)
+                if np.isclose(accel_mag, abs(expected_drag_accel), atol=0.1):
+                    return "Sliding with Drag"
         return None
 
     def detect_collision(self, vel1_pre, vel2_pre, vel1_post, vel2_post, normal):
@@ -88,8 +102,7 @@ class PhysicsEngine:
         rel_vel_post = np.dot((np.array(vel1_post) - np.array(vel2_post)), normal)
         elasticity_ratio = abs(rel_vel_post / rel_vel_pre) if rel_vel_pre != 0 else 0
 
-        collision_type = (
+        return (
             "Elastic Collision" if elasticity_ratio > self.collision_elastic_factor
             else "Inelastic Collision"
         )
-        return collision_type

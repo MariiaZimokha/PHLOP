@@ -54,7 +54,7 @@ class PhysicsTaxonomy:
 
             collision_results[pair] = {
                 "category": "Interaction Events",
-                "subcategory": "Collision",
+                "subcategory": "Collisions",
                 "labels": [collision_type],
             }
         return collision_results
