@@ -20,8 +20,8 @@
 |                               |                             | ~~Momentum Transfer~~                             |
 | **State Transitions**         | Motion Change               | Moving to Stopping                            |
 |                               |                             | Stationary to Moving                            |
-|                               | External Force Effect       | Object Stopped by Friction,                   |
-|                               |                             | Object Moved by External Force                |
+|                               | ~~External Force Effect~~       | ~~Object Stopped by Friction,~~                   |
+|                               |                             | ~~Object Moved by External Force~~                |
 | **Environmental Interactions**| Friction-Induced Events     | Friction Stop                                 |
 |                               |                             | Sliding with Friction                         |
 |                               |                             | ~~Drag Force Effects~~                            |
