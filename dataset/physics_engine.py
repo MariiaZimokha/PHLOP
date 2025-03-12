@@ -2,7 +2,7 @@ import numpy as np
 
 
 class PhysicsEngine:
-    def __init__(self, precision=5, velocity_threshold=1e-4, acceleration_threshold=1e-6, epsilon=0.01, gravity=9.8, collision_elastic_factor=0.5):
+    def __init__(self, precision=5, velocity_threshold=1e-6, acceleration_threshold=1e-6, epsilon=0.01, gravity=9.8, collision_elastic_factor=0.5):
         self.precision = precision
         self.velocity_threshold = velocity_threshold
         self.acceleration_threshold = acceleration_threshold
@@ -41,7 +41,7 @@ class PhysicsEngine:
         """
         Determines the rotational motion type:
           - Pure Rotation: When linear speed is near zero but angular speed is significant.
-          - Rolling Motion: When v ≈ r * w.
+          - Rolling Motion: When v ≈ r * w - linear velocity is proportional to the angular velocity,
           - Rolling with Slipping: When linear speed deviates from r * w.
         """
         angular_velocity = np.array(angular_velocity)
@@ -84,7 +84,9 @@ class PhysicsEngine:
         if vel_mag <= self.velocity_threshold:
             return "Friction Stop"
 
-        if accel_mag > self.acceleration_threshold and np.dot(velocity, acceleration) < 0:
+        # if the object decelerating
+        if np.dot(velocity, acceleration) < 0:
+        # if accel_mag > self.acceleration_threshold and np.dot(velocity, acceleration) < 0:
             if np.isclose(accel_mag, abs(expected_friction_accel), atol=0.1):
                 return "Sliding with Friction"
             # if drag-related deceleration.
@@ -96,7 +98,7 @@ class PhysicsEngine:
                     return "Sliding with Drag"
         return None
 
-    def detect_collision(self, vel1_pre, vel2_pre, vel1_post, vel2_post, normal):
+    def detect_collision_1(self, vel1_pre, vel2_pre, vel1_post, vel2_post, normal):
         # relative velocities before and after the collision
         rel_vel_pre = np.dot((np.array(vel1_pre) - np.array(vel2_pre)), normal)
         rel_vel_post = np.dot((np.array(vel1_post) - np.array(vel2_post)), normal)
@@ -106,3 +108,27 @@ class PhysicsEngine:
             "Elastic Collision" if elasticity_ratio > self.collision_elastic_factor
             else "Inelastic Collision"
         )
+
+    def detect_collision(self, vel1_pre, vel2_pre, vel1_post, vel2_post, normal):
+        vel1_pre = np.array(vel1_pre)
+        vel2_pre = np.array(vel2_pre)
+        vel1_post = np.array(vel1_post)
+        vel2_post = np.array(vel2_post)
+
+        rel_vel_pre = np.dot(vel1_pre - vel2_pre, normal)
+        rel_vel_post = np.dot(vel1_post - vel2_post, normal)
+
+        # If the pre-collision relative speed is too low, avoid division by zero.
+        if abs(rel_vel_pre) < self.velocity_threshold:
+            return
+
+        # coefficient of restitution
+        # (with the negative sign to account for direction reversal)
+        restitution = -rel_vel_post / rel_vel_pre
+
+        margin = 0.05
+
+        if restitution >= self.collision_elastic_factor - margin:
+            return "Elastic Collision"
+        else:
+            return "Inelastic Collision"

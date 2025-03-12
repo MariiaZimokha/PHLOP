@@ -15,6 +15,10 @@ annotator = Annotator()
 video_annotator = VideoAnnotationVisualizer()
 width = 1600
 height = 912
+width = 1024
+height = 768
+
+# 024.0 x 768.
 sim = Simulation(obj, annotator=annotator, width=width, height=height)
 
 for i in tqdm(range(1)):

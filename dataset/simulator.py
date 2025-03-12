@@ -26,11 +26,18 @@ class Simulation:
     <option timestep="0.0005" gravity="0 0 -9.81"/>
     <visual>
         <global offwidth="{self.width}" offheight="{self.height}" />
+        <quality shadowsize="2048" />
+        
     </visual>"""
 
+        # <light name="light" pos="0 0 .6" directional="true" dir="0 0 -1" specular="0.1 0.1 0.1" castshadow="true" />
+        # <light name="l" pos="0 -.3 .4" mode="targetbodycom" diffuse=".8 .8 .8" specular=".3 .3 .3"/>
         self.world_body_start = """
     <worldbody>
-        <light name="light" pos="0 0 3"/>
+
+        <light name="light2" pos="0  0 .3" cutoff="270"    specular="0.1 0.1 0.1" />
+        <light name="light"  pos=".8 1 .8" diffuse="0.8 1 1" specular=".5 .5 .5"/>
+
         <geom name="floor" type="plane" 
               size="50 50 0.1" 
               pos="0 0 0" 
@@ -39,8 +46,9 @@ class Simulation:
               group="0"
               material="floor_mat"/>
     """
+        # <camera name="camera" pos="0 -.1 .07" xyaxes="1 0 0 0 1 2"/>
         self.world_body_end = """
-        <camera name="camera" pos="0 -2 1" xyaxes="0.8944 0 0 0 0.4472 0.8944"/>
+        <camera name="camera" pos="-.1 -.1 0.1" xyaxes="0.78 -0.63 0 0.27 0.33 0.9"/>
     </worldbody>
 </mujoco>"""
 
@@ -94,7 +102,7 @@ class Simulation:
             )
 
         asset_defs.append(
-            """<material name="floor_mat" specular="0.0" shininess="0.0" rgba="0.8 0.8 0.8 1.0" />"""
+            """<material name="floor_mat" specular="0.2" shininess="0.2" rgba="0.8 0.8 0.8 1.0" />"""
         )
         return "".join(asset_defs), "".join(bodies_xml)
 
