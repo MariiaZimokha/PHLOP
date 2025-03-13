@@ -62,7 +62,7 @@ class PhysicsEngine:
             return "Rolling Motion with Slipping"
         return None
 
-    def detect_friction_event(self, velocity, acceleration, friction_coefficient, drag_coefficient=None):
+    def detect_friction_event(self, velocity,  acceleration, friction_coefficient, drag_coefficient=None):
         """
         Detect friction-related events.
           - "Friction Stop": When the object’s velocity is negligible.
@@ -78,24 +78,25 @@ class PhysicsEngine:
         # expected frictional deceleration
         expected_friction_accel = -friction_coefficient * self.gravity
 
-        # if vel_mag == 0 and accel_mag == 0:
-        #     return "Friction Stop"
-
-        if vel_mag <= self.velocity_threshold:
+        # if vel_mag <= self.velocity_threshold:
+        if vel_mag <= self.velocity_threshold and accel_mag <= self.acceleration_threshold:
+            
             return "Friction Stop"
 
-        # if the object decelerating
-        if np.dot(velocity, acceleration) < 0:
-        # if accel_mag > self.acceleration_threshold and np.dot(velocity, acceleration) < 0:
-            if np.isclose(accel_mag, abs(expected_friction_accel), atol=0.1):
-                return "Sliding with Friction"
-            # if drag-related deceleration.
-            if drag_coefficient is not None:
-                # air resistance at higher speeds
-                # deceleration scales with the square of the velocity.
-                expected_drag_accel = -drag_coefficient * (vel_mag ** 2)
-                if np.isclose(accel_mag, abs(expected_drag_accel), atol=0.1):
-                    return "Sliding with Drag"
+        # Ensure the object is actually moving
+        if vel_mag > self.velocity_threshold:
+            # Ensure acceleration is negative (deceleration) and opposes velocity
+            if np.dot(velocity, acceleration) < 0:  
+                # Compute actual deceleration direction
+                deceleration_vector = -velocity / vel_mag * accel_mag  
+                expected_deceleration_vector = -velocity / vel_mag * abs(expected_friction_accel)
+
+                # Check if the actual deceleration is aligned with expected frictional force
+                alignment = np.dot(deceleration_vector, expected_deceleration_vector)
+                
+                if alignment > 0.95:  # Threshold to ensure alignment
+                    return "Sliding with Friction"
+
         return None
 
     def detect_collision_1(self, vel1_pre, vel2_pre, vel1_post, vel2_post, normal):

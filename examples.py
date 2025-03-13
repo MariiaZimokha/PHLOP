@@ -233,9 +233,16 @@ def generate_moving_to_stopping_objects():
     ]
 
 
+def generate_sliding_with_friction():
+    return [
+        generate_obj_json_like("cube", "metal", "sliding", [4.5, 0, 0], [0, 0, 0], 0.1, 0.6, -0.5261, 0.8233),
+        generate_obj_json_like("cube", "glass", "sliding", [-4.5, 0, 0], [0, 0, 0], 0.1, 0.6,  1.4587, -0.6467)
+    ]
+
+
 event_labels = {
     # "Constant Velocity": generate_constant_velocity_objects,
-    "Stationary": generate_stationary_objects,
+    # "Stationary": generate_stationary_objects,
     # "Rolling Motion": generate_rolling_motion_objects,
     # "Pure Rotation": generate_pure_rotation_objects,
     # "Decelerating": generate_decelerating_objects,  # friction stop
@@ -247,7 +254,7 @@ event_labels = {
     # "Stationary to Moving": generate_stationary_to_moving_objects,
     # "Moving to Stopping": generate_decelerating_objects,
     # "Friction Stop": generate_decelerating_objects,
-    # "Sliding with Friction": generate_decelerating_objects
+    "Sliding with Friction": generate_sliding_with_friction
 
 
     # "Accelerating": generate_accelerating_objects,
