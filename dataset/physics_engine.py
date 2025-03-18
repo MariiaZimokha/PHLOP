@@ -80,35 +80,23 @@ class PhysicsEngine:
 
         # if vel_mag <= self.velocity_threshold:
         if vel_mag <= self.velocity_threshold and accel_mag <= self.acceleration_threshold:
-            
             return "Friction Stop"
 
-        # Ensure the object is actually moving
+        # ensure the object is actually moving
         if vel_mag > self.velocity_threshold:
-            # Ensure acceleration is negative (deceleration) and opposes velocity
-            if np.dot(velocity, acceleration) < 0:  
+            # ensure acceleration is negative (deceleration) and opposes velocity
+            if np.dot(velocity, acceleration) < 0:
                 # Compute actual deceleration direction
-                deceleration_vector = -velocity / vel_mag * accel_mag  
+                deceleration_vector = -velocity / vel_mag * accel_mag
                 expected_deceleration_vector = -velocity / vel_mag * abs(expected_friction_accel)
 
-                # Check if the actual deceleration is aligned with expected frictional force
+                # check if the actual deceleration is aligned with expected frictional force
                 alignment = np.dot(deceleration_vector, expected_deceleration_vector)
-                
+
                 if alignment > 0.95:  # Threshold to ensure alignment
                     return "Sliding with Friction"
 
         return None
-
-    def detect_collision_1(self, vel1_pre, vel2_pre, vel1_post, vel2_post, normal):
-        # relative velocities before and after the collision
-        rel_vel_pre = np.dot((np.array(vel1_pre) - np.array(vel2_pre)), normal)
-        rel_vel_post = np.dot((np.array(vel1_post) - np.array(vel2_post)), normal)
-        elasticity_ratio = abs(rel_vel_post / rel_vel_pre) if rel_vel_pre != 0 else 0
-
-        return (
-            "Elastic Collision" if elasticity_ratio > self.collision_elastic_factor
-            else "Inelastic Collision"
-        )
 
     def detect_collision(self, vel1_pre, vel2_pre, vel1_post, vel2_post, normal):
         vel1_pre = np.array(vel1_pre)

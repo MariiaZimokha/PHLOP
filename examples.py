@@ -255,11 +255,6 @@ event_labels = {
     # "Moving to Stopping": generate_decelerating_objects,
     # "Friction Stop": generate_decelerating_objects,
     "Sliding with Friction": generate_sliding_with_friction
-
-
-    # "Accelerating": generate_accelerating_objects,
-    # "Decelerating": generate_decelerating_objects,
-    # "Rolling Motion": generate_rolling_motion_objects,
 }
 
 
