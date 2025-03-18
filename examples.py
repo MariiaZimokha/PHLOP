@@ -241,19 +241,19 @@ def generate_sliding_with_friction():
 
 
 event_labels = {
-    # "Constant Velocity": generate_constant_velocity_objects,
-    # "Stationary": generate_stationary_objects,
-    # "Rolling Motion": generate_rolling_motion_objects,
-    # "Pure Rotation": generate_pure_rotation_objects,
-    # "Decelerating": generate_decelerating_objects,  # friction stop
-    # "Inelastic Collision": generate_inelastic_collision_objects,
+    "Constant Velocity": generate_constant_velocity_objects,
+    "Stationary": generate_stationary_objects,
+    "Rolling Motion": generate_rolling_motion_objects,
+    "Pure Rotation": generate_pure_rotation_objects,
+    "Decelerating": generate_decelerating_objects,  # friction stop
+    "Inelastic Collision": generate_inelastic_collision_objects,
 
     # # not done yet
     # # "Elastic Collision": generate_elastic_collision_objects,
 
-    # "Stationary to Moving": generate_stationary_to_moving_objects,
-    # "Moving to Stopping": generate_decelerating_objects,
-    # "Friction Stop": generate_decelerating_objects,
+    "Stationary to Moving": generate_stationary_to_moving_objects,
+    "Moving to Stopping": generate_decelerating_objects,
+    "Friction Stop": generate_decelerating_objects,
     "Sliding with Friction": generate_sliding_with_friction
 }
 

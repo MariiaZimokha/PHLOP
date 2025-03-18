@@ -32,7 +32,8 @@ class PhysicsEngine:
             return "Constant Velocity"
         else:
             # Determine if accelerating or decelerating based on the dot product between velocity and acceleration
-            if np.dot(vel_curr, accel) > 0:
+            # if np.dot(vel_curr, accel) > 0:
+            if vel_curr_mag > vel_prev_mag:
                 return "Accelerating"
             else:
                 return "Decelerating"
