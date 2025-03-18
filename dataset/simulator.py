@@ -9,6 +9,7 @@ import cv2
 from dataset.utils import save_file, set_physics_properties, set_position_and_velocity
 from dataset.camera import CameraSettings
 from dataset.world.floor import Floor
+from dataset.world.light import Light
 
 
 class Simulation:
@@ -19,6 +20,7 @@ class Simulation:
         self.annotator = annotator
         self.camera_settings = CameraSettings()
         self.floor = Floor()
+        self.light = Light()
         self.seg_color_map = {}
 
         # XML template for the MuJoCo simulation
@@ -32,14 +34,10 @@ class Simulation:
         
     </visual>"""
 
-        # <light name="light" pos="0 0 .6" directional="true" dir="0 0 -1" specular="0.1 0.1 0.1" castshadow="true" />
-        # <light name="l" pos="0 -.3 .4" mode="targetbodycom" diffuse=".8 .8 .8" specular=".3 .3 .3"/>
         self.world_body_start = """
         <worldbody>
-
-            <light name="light2" pos="0  0 .3" cutoff="270"    specular="0.1 0.1 0.1" />
-            <light name="light"  pos=".8 1 .8" diffuse="0.8 1 1" specular=".5 .5 .5"/>
         """
+
         self.world_floor = """
             <geom name="floor" type="plane" 
               size="50 50 0.1" 
@@ -85,7 +83,7 @@ class Simulation:
             objects.append(obj)
         return objects
 
-    def __build_assets_and_bodies(self, objects, floor):
+    def __build_assets_and_bodies(self, objects, floor, lights):
         asset_defs = []
         bodies_xml = []
 
@@ -104,7 +102,6 @@ class Simulation:
                 </body>"""
             )
 
-
         asset_defs.append(
             f"""<material name="floor_mat" 
                     specular="{floor.get("specular", 0.2)}" 
@@ -112,7 +109,16 @@ class Simulation:
                     rgba="{floor.get("rgba", "0.8 0.8 0.8 1.0")}"
                 />"""
         )
-        return "".join(asset_defs), "".join(bodies_xml)
+
+        light_xml = ""
+        for i, light in enumerate(lights):
+            light_xml += f"""
+            <light name="light{i}" pos="{light['pos'][0]} {light['pos'][1]} {light['pos'][2]}" 
+                diffuse="{light['diffuse']}" specular="{light['specular']}" 
+                cutoff="{light['cutoff']}" directional="{str(light['directional']).lower()}"/>
+            """
+
+        return "".join(asset_defs), "".join(bodies_xml), light_xml
 
     def __detect_collisions(self, model, data):
         colliding_pairs = set()
@@ -124,7 +130,7 @@ class Simulation:
         return colliding_pairs
 
     def run_simulation(
-        self, num_objects=3, objects=None, duration=5.0, framerate=25, camera=None, path="", floor=None
+        self, num_objects=3, objects=None, duration=5.0, framerate=25, camera=None, path="", floor=None, lights=None
     ):
         """
         camera:
@@ -140,23 +146,27 @@ class Simulation:
         if floor is None:
             floor = self.floor.get_settings()
 
+        if lights is None:
+            lights = self.light.get_settings(2)
+
         world_floor = self.world_floor.format(
             floor_rgba=floor["rgba"],
             floor_friction=floor["friction"]
         )
 
         num_objects = len(objects)
-        asset_defs, bodies_xml = self.__build_assets_and_bodies(objects, floor)
+        asset_defs, bodies_xml, light_xml = self.__build_assets_and_bodies(objects, floor, lights)
 
         simulation_xml = (
             f"{self.header}"
             f"<asset>{asset_defs}</asset>"
             f"{self.world_body_start}"
+            f"{light_xml}"
             f"{world_floor}"
             f"{bodies_xml}"
             f"{self.world_body_end}"
         )
-        
+
         # Initialize MuJoCo model and data
         model = mujoco.MjModel.from_xml_string(simulation_xml)
         data = mujoco.MjData(model)
@@ -255,6 +265,7 @@ class Simulation:
             "world": {
                 "floor": floor,
                 "camera": camera_init_config,
+                "lights": lights
             },
             "objects": objects,
             "frames": annotation_frames,
