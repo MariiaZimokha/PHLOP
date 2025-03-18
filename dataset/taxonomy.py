@@ -52,12 +52,12 @@ class PhysicsTaxonomy:
                 continue
 
             collision_type = self.physics_engine.detect_collision(vel1_pre, vel2_pre, vel1_post, vel2_post, normal)
-
-            collision_results[pair] = {
-                "category": "Interaction Events",
-                "subcategory": "Collisions",
-                "labels": [collision_type],
-            }
+            if collision_type:
+                collision_results[pair] = {
+                    "category": "Interaction Events",
+                    "subcategory": "Collisions",
+                    "labels": [collision_type],
+                }
         return collision_results
 
     def map_motion_state(self, motion):
@@ -88,20 +88,25 @@ class PhysicsTaxonomy:
         return state_transition
 
     def get_state_transitions_labels(self, cur_velocity, prev_velocity, object_id, dt):
-        subcategory = self.detect_state_transitions(cur_velocity, prev_velocity, object_id, dt)
-        if subcategory:
-            if subcategory == "Moving to Stopping":
-                return {
-                    "category": "State transitions",
-                    "subcategory": subcategory,
-                    "labels": ["Friction causes deceleration"]
-                }
-            if subcategory == "Stationary to Moving":
-                return {
-                    "category": "State transitions",
-                    "subcategory": subcategory,
-                    "labels": ["Force overcomes static friction"]
-                }
+        label = self.detect_state_transitions(cur_velocity, prev_velocity, object_id, dt)
+        if label:
+            return {
+                "category": "State transitions",
+                "subcategory": "Motion Change",
+                "labels": [label]
+            }
+            # if subcategory == "Moving to Stopping":
+            #     return {
+            #         "category": "State transitions",
+            #         "subcategory": subcategory,
+            #         "labels": ["Friction causes deceleration"]
+            #     }
+            # if subcategory == "Stationary to Moving":
+            #     return {
+            #         "category": "State transitions",
+            #         "subcategory": subcategory,
+            #         "labels": ["Force overcomes static friction"]
+            #     }
         return None
 
     def get_rotational_motions(self, angular_velocity, linear_velocity, radius, shape):
