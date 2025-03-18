@@ -22,7 +22,8 @@ height = 768
 sim = Simulation(obj, annotator=annotator, width=width, height=height)
 
 for i in tqdm(range(1)):
-    num_objects = random.randrange(2, 15)
+    # num_objects = random.randrange(2, 15)
+    num_objects = 4
     path = f"generated/{i}/"
 
     if not os.path.exists(path):
