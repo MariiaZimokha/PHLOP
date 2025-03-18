@@ -7,7 +7,7 @@ import json
 import cv2
 
 from dataset.utils import save_file, set_physics_properties, set_position_and_velocity
-from dataset.camera import CameraSettings
+from dataset.world.camera import CameraSettings
 from dataset.world.floor import Floor
 from dataset.world.light import Light
 
