@@ -6,7 +6,7 @@ class Light:
     def __init__(self, min_distance=1):
         self.min_distance = min_distance
 
-    def get_settings(self, num_lights=1, cutoff_range=[30, 180]):
+    def get_settings(self, num_lights=1, cutoff_range=[50, 180]):
         lights = []
         positions = []
 

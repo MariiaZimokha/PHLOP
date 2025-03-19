@@ -163,7 +163,9 @@ class QuestionAnswers:
 
                 velocity = obj.get("velocity")
                 mass = round(float(object_data.get("mass", "0")), 3)
-                friction = round(float(object_data.get("friction", "0")), 3)
+                friction = obj.get("friction", '0 0 0')
+                friction = [float(f) for f in friction.split(' ')]
+                friction = round(friction[0], 3)
                 density = round(float(object_data.get("density", "0")), 3)
 
                 closest_color, _ = self.rgba_to_text(object_data.get("visual", {}).get("rgba", ""))

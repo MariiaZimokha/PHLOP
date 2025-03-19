@@ -10,6 +10,7 @@ from dataset.world.constants import (
     DENSITY_SCALING_FACTOR,
 )
 
+
 class Object:
     def __init__(self):
         self.material_mixtures = MATERIAL_MIXTURES
@@ -37,7 +38,6 @@ class Object:
         return {"rgba": final_rgba_str, "specular": specular}
 
     def get_object(self, shape=None, material=None):
-        # shapes = ["ball", "cylinder", "cube", "block"]
         if shape is None or shape not in SHAPES:
             shape = random.choice(SHAPES)
 
@@ -49,10 +49,10 @@ class Object:
 
         elasticity_val = self.__sample_from_mixture(mixture_data["elasticity_dist"])
         density_val = self.__sample_from_mixture(mixture_data["density_dist"])
-        friction_lateral = self.__sample_from_mixture(
-            mixture_data["friction_dist_lateral"]
-        )
-        friction_str = f"{friction_lateral:.2f}"
+        friction_static = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
+        friction_dynamic = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
+        friction_rolling = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
+        friction_str = f"{friction_static:.2f} {friction_dynamic:.2f} {friction_rolling:.2f}"
 
         visual = self.__get_visual(material)
 
@@ -80,8 +80,8 @@ class Object:
         raw_mass = density_val * volume
         mass_val = max(raw_mass, 1e-6)
 
-        linear_velocity = np.random.uniform(-2, 2, size=3)
-        angular_velocity = np.random.uniform(-2, 2, size=3)
+        linear_velocity = np.random.uniform(-1, 1, size=3)
+        angular_velocity = np.random.uniform(-1, 1, size=3)
 
         return {
             "shape": shape,

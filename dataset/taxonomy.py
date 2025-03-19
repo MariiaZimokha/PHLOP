@@ -150,7 +150,8 @@ class PhysicsTaxonomy:
 
         for obj in self.objects:
             object_id = obj.get("id", '')
-            friction = float(obj.get("friction", '0'))
+            friction = obj.get("friction", '0 0 0')
+            friction = [float(f) for f in friction.split(' ')]
             cur_velocity = current_objects.get(object_id, {}).get("velocity", [])
             cur_angular_velocity = current_objects.get(object_id, {}).get("angular_velocity", [])
             prev_velocity = prev_frame.get(object_id, {}).get("velocity", [])
