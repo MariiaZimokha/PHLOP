@@ -1,10 +1,12 @@
+import random
 import numpy as np
 import mujoco
 
 
 class CameraSettings:
-    def __init__(self, model=None, data=None, camera_name="camera"):
+    def __init__(self, model=None, data=None, camera_name="camera", evaluation_mode=False):
         self.camera_name = camera_name
+        self.evaluation_mode = evaluation_mode
         if model and data:
             self.set_model(model, data)
 
@@ -22,20 +24,31 @@ class CameraSettings:
                 f"Camera with name '{self.camera_name}' not found in the model!"
             )
 
-    def set_init_settings(self, data):
-        self.camera.lookat[:] = data.get("lookat", [0.0, 0.0, 0.0])
-        self.camera.distance = data.get(
-            "distance", 2.23606797749979
-        )  # Distance from the origin
-        self.camera.azimuth = data.get("azimuth", -90.0)  # Horizontal rotation
-        self.camera.elevation = data.get(
-            "elevation", -26.56505117707799
-        )  # Vertical rotation (arctan(1/2) in degrees)
+    def set_init_settings(self, data=None):
+        if data is None:
+            data = {}
+
+        if self.evaluation_mode:
+            self.camera.lookat[:] = data.get("lookat", [random.uniform(-0.5, 0.5),
+                                             random.uniform(-0.5, 0.5), random.uniform(0, 0.5)])
+            self.camera.distance = data.get("distance", random.uniform(1.5, 4))
+            self.camera.azimuth = data.get("azimuth", random.uniform(-30, 0))
+            self.camera.elevation = data.get("elevation", random.uniform(-30, 0))
+
+        else:
+            # specifies the point in 3D space that the camera is focused on
+            self.camera.lookat[:] = data.get("lookat", [random.uniform(-0.5, 0.5),
+                                             random.uniform(-0.5, 0.5), random.uniform(0, 0.5)])
+            # how far the camera is from the lookat point
+            self.camera.distance = data.get("distance", random.uniform(1.5, 3.5))
+            # horizontal angle of the camera relative to the lookat point
+            self.camera.azimuth = data.get("azimuth", random.uniform(-90, -30))
+            #  vertical angle of the camera relative to the lookat poin
+            self.camera.elevation = data.get("elevation", random.uniform(-30, 0))
 
         self.prev_camera_lookat = self.camera.lookat
         self.prev_camera_distance = self.camera.distance
         self.alpha = 0.1
-        pass
 
     def get_init_settings(self):
         return {
@@ -56,7 +69,7 @@ class CameraSettings:
                 self.model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free"
             )
             if joint_id != -1:
-                obj_positions.append(self.data.qpos[joint_id : joint_id + 3])
+                obj_positions.append(self.data.qpos[joint_id: joint_id + 3])
 
         if not obj_positions:
             return np.array([0, 0, 2]), 3.0  # Default lookat and distance
@@ -65,7 +78,7 @@ class CameraSettings:
 
         # Compute center of mass of objects
         camera_lookat = np.mean(obj_positions, axis=0)
-        camera_lookat[2] = max(camera_lookat[2], 0.5)  # Ensure it's above ground
+        camera_lookat[2] = max(camera_lookat[2], 0.5)  # above ground
 
         # Compute spread of objects to adjust distance
         max_distance = np.max(np.linalg.norm(obj_positions - camera_lookat, axis=1))

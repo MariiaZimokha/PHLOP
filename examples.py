@@ -1,7 +1,7 @@
 import os
 import random
 import numpy as np
-from dataset.object import Object
+from dataset.world.object import Object
 from dataset.annotator import Annotator
 from dataset.video_annotation_visualizer import VideoAnnotationVisualizer
 from dataset.simulator import Simulation
