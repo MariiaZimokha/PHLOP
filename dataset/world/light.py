@@ -37,7 +37,7 @@ class Light:
         ]
 
     def _generate_diffuse(self):
-        return f"{random.uniform(0.6, 1)} {random.uniform(0.8, 1)} {random.uniform(0.8, 1)}"
+        return f"{random.uniform(0.7, 1)} {random.uniform(0.8, 1)} {random.uniform(0.8, 1)}"
 
     def _generate_specular(self):
         # reflection of light from shiny surfaces

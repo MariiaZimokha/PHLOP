@@ -10,13 +10,14 @@ from dataset.utils import save_file, set_physics_properties, set_position_and_ve
 from dataset.world.camera import CameraSettings
 from dataset.world.floor import Floor
 from dataset.world.light import Light
+from dataset.world.constants import MODES
 
 
 class Simulation:
     def __init__(self, world_object, width=1920, height=1088, annotator=None):
         self.obj = world_object
         self.width, self.height = width, height
-        self.modes = ["collision", "sliding", "stationary", "offset"]
+        self.modes = MODES
         self.annotator = annotator
         self.camera_settings = CameraSettings()
         self.floor = Floor()

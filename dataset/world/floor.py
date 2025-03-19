@@ -3,7 +3,7 @@ from dataset.world.constants import FLOOR_TEXTURE
 
 
 class Floor:
-    def __init__(self, min_fric=0.01, max_fric=1) -> None:
+    def __init__(self, min_fric=0.0, max_fric=1) -> None:
         self.min_fric = min_fric
         self.max_fric = max_fric
 

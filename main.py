@@ -1,5 +1,5 @@
 from dataset.question_answer import QuestionAnswers
-from dataset.object import Object
+from dataset.world.object import Object
 from dataset.annotator import Annotator
 from dataset.video_annotation_visualizer import VideoAnnotationVisualizer
 from dataset.simulator import Simulation
@@ -21,9 +21,9 @@ height = 768
 # 024.0 x 768.
 sim = Simulation(obj, annotator=annotator, width=width, height=height)
 
-for i in tqdm(range(1)):
-    # num_objects = random.randrange(2, 15)
-    num_objects = 4
+for i in tqdm(range(50)):
+    num_objects = random.randrange(2, 8)
+    # num_objects = 4
     path = f"generated/{i}/"
 
     if not os.path.exists(path):
