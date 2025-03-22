@@ -26,3 +26,32 @@
 |                               |                             | Sliding with Friction                         |
 |                               |                             | ~~Drag Force Effects~~                            |
 
+
+
+
+### Settings
+
+#### Camera
+- **lookat**: Point in 3D space that the camera is focused on.
+
+    - **Format**: [x, y, z] in meters **(m)**
+
+    - **Example**: represents the origin of the global coordinate system
+
+- **distance**: Distance from the camera to the lookat point
+
+    - **Unit**: meters (m)
+
+    - **Range**: Positive values
+
+- **azimuth**: Horizontal angle around the vertical axis
+
+    - **Unit**: degrees (°)
+
+    - **Range**: [0°, 360°] - 0° typically faces forward, increasing clockwise
+
+- **elevation**: Vertical angle above or below the horizontal plane
+
+    - **Unit**: degrees (°)
+
+    - **Range**: [-90°, 90°] - Positive values look up, negative values look down
