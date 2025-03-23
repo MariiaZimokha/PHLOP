@@ -63,65 +63,63 @@ Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units
 #### Objects
 
 **Materials**:
+- **metal**
 
-    - **metal**
+- **wood**
 
-    - **wood**
+- **rubber**
 
-    - **rubber**
+- **glass**
 
-    - **glass**
-
-    - **plastic**
+- **plastic**
 
 **Shapes**:
 
-    - **ball**
+- **ball**
 
-    - **cylinder**
+- **cylinder**
 
-    - **cube**
+- **cube**
 
-    - **block**
+- **block**
 
 **Modes**:
+- **collision**
 
-    - **collision**
+- **sliding**
 
-    - **sliding**
+- **stationary**
 
-    - **stationary**
-
-    - **offset**
+- **offset**
 
 **Mass** - kilograms (kg)
 
 **Velocity** - meters per second (m/s)
 
-    - v_x: x-component of velocity - measures the rate of change of position along the x-axis
+- v_x: x-component of velocity - measures the rate of change of position along the x-axis
 
-    - v_y: x-component of velocity - measures the rate of change of position along the y-axis
+- v_y: x-component of velocity - measures the rate of change of position along the y-axis
 
-    - v_x: x-component of velocity - measures the rate of change of position along the z-axis
+- v_x: x-component of velocity - measures the rate of change of position along the z-axis
     
 **Angular Velocity** - *radians per second **(rad/s)***, the rate of rotation of an object about an axis.
 
-    - **ω_x**: x-component of angular velocity
+- **ω_x**: x-component of angular velocity
 
-        - Measures the rate of rotation about the x-axis
+    - Measures the rate of rotation about the x-axis
 
-        - Also called "roll rate" in some contexts
+    - Also called "roll rate" in some contexts
     
-    - **ω_y**: y-component of angular velocity
+- **ω_y**: y-component of angular velocity
     
-        - Measures the rate of rotation about the y-axis
+    - Measures the rate of rotation about the y-axis
     
-        - Also called "pitch rate" in some contexts
+    - Also called "pitch rate" in some contexts
     
-    - **ω_z**: x-component of angular velocity
+- **ω_z**: x-component of angular velocity
     
-        - Measures the rate of rotation about the z-axis
+    - Measures the rate of rotation about the z-axis
     
-        - Also called "yaw rate" in some contexts
+    - Also called "yaw rate" in some contexts
 
     
