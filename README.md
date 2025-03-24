@@ -60,6 +60,48 @@ Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units
 
     - **Range**: [-90°, 90°] - Positive values look up, negative values look down
 
+#### Floor
+- **friction**: Describes the interaction between objects and the floor surface
+
+    - **friction_static**: Coefficient of static friction (resistance to initial motion).
+
+        - **Unit**: Unitless (coefficient)
+
+        - **Range**: [min_fric, max_fric]
+
+    - **friction_dynamic**: Coefficient of dynamic friction (resistance during motion).
+
+        - **Unit**: Unitless (coefficient)
+
+        - **Range**: [min_fric, max_fric]
+
+     - **friction_spin**: Coefficient of  rotational friction (resistance to spinning motion).
+
+        - **Unit**: Unitless (coefficient)
+
+        - **Range**: [min_fric, max_fric]
+
+    - **rgba**: Defines the color and transparency of the floor based on friction values.
+        
+        - **Format**: [red, green, blue, alpha]
+
+        - **Unit**: Normalized values between 0.0 and 1.0
+
+        - **Behavior**: Lower friction results in brighter colors; alpha is always set to 1 (fully opaque).
+
+    - **specular**: Determines how shiny or reflective the floor appears.
+
+        - **Unit**: Normalized values between 0.0 and 1.0
+
+        - **Behavior**: Higher friction produces less shine; lower friction results in a shinier surface.
+
+    - **shininess**: Controls the sharpness of reflections on the floor surface.
+
+        - **Unit**: Normalized values between 0.0 and 1.0
+
+        - **Behavior**: Higher friction produces a matte finish; lower friction results in sharper reflections.
+
+
 #### Objects
 
 **Materials**:
@@ -98,9 +140,9 @@ Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units
 
 - v_x: x-component of velocity - measures the rate of change of position along the x-axis
 
-- v_y: x-component of velocity - measures the rate of change of position along the y-axis
+- v_y: y-component of velocity - measures the rate of change of position along the y-axis
 
-- v_x: x-component of velocity - measures the rate of change of position along the z-axis
+- v_z: z-component of velocity - measures the rate of change of position along the z-axis
     
 **Angular Velocity** - *radians per second **(rad/s)***, the rate of rotation of an object about an axis.
 
@@ -116,10 +158,17 @@ Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units
     
     - Also called "pitch rate" in some contexts
     
-- **ω_z**: x-component of angular velocity
+- **ω_z**: z-component of angular velocity
     
     - Measures the rate of rotation about the z-axis
     
     - Also called "yaw rate" in some contexts
 
     
+**Density** - Mass / Volume = kg / m³
+
+**Elasticity** - coefficients of restitution, which are unitless values between 0 and 1. These values indicate:
+
+- **0**: Perfectly inelastic collision (no bounce)
+
+- **1**: Perfectly elastic collision (no energy loss)
