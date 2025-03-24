@@ -81,26 +81,72 @@ Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units
 
         - **Range**: [min_fric, max_fric]
 
-    - **rgba**: Defines the color and transparency of the floor based on friction values.
+- **rgba**: Defines the color and transparency of the floor based on friction values.
         
-        - **Format**: [red, green, blue, alpha]
+    - **Format**: [red, green, blue, alpha]
 
-        - **Unit**: Normalized values between 0.0 and 1.0
+    - **Unit**: Normalized values between 0.0 and 1.0
 
-        - **Behavior**: Lower friction results in brighter colors; alpha is always set to 1 (fully opaque).
+    - **Behavior**: Lower friction results in brighter colors; alpha is always set to 1 (fully opaque).
 
-    - **specular**: Determines how shiny or reflective the floor appears.
+- **specular**: Determines how shiny or reflective the floor appears.
 
-        - **Unit**: Normalized values between 0.0 and 1.0
+    - **Unit**: Normalized values between 0.0 and 1.0
 
-        - **Behavior**: Higher friction produces less shine; lower friction results in a shinier surface.
+    - **Behavior**: Higher friction produces less shine; lower friction results in a shinier surface.
 
-    - **shininess**: Controls the sharpness of reflections on the floor surface.
+- **shininess**: Controls the sharpness of reflections on the floor surface.
 
-        - **Unit**: Normalized values between 0.0 and 1.0
+    - **Unit**: Normalized values between 0.0 and 1.0
 
-        - **Behavior**: Higher friction produces a matte finish; lower friction results in sharper reflections.
+    - **Behavior**: Higher friction produces a matte finish; lower friction results in sharper reflections.
 
+
+#### Light
+- **pos**: Light source position in 3D space
+
+    - **Format**: [x, y, z] in normalized scene coordinates
+
+    - **Range**:
+        - x: [-1, 1]
+
+        - y: [-1, 1]
+
+        - z: [0.1, 0.7] (vertical placement above scene floor)
+
+    - **Constraint**: Minimum distance between lights enforced via min_distance parameter
+
+- **diffuse**: Base color of emitted light
+
+    - **Format**: RGB values in [0.0, 1.0] range
+
+    - **Randomization**:
+
+        - Red: [0.7, 1.0]
+
+        - Green/Blue: [0.8, 1.0]
+
+    - **Effect**: Determines perceived "warmth" of light source
+
+- **specular**: Reflection characteristics for shiny surfaces
+
+    - **Format**: RGB values in [0.0, 1.0] range
+
+     - **Randomization**:
+
+        - Red: [0.5, 0.8]
+
+        - Green/Blue: [0.5, 1.0]
+
+    - **Behavior**: Higher values increase material reflectivity
+
+- **cutoff**: Angular spread of light influence
+
+    - **Unit**: Degrees (°)
+
+     - **Range**: [0°, 180°]
+
+    - **Purpose**: Controls light beam width and falloff
 
 #### Objects
 
