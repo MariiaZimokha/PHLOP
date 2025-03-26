@@ -54,15 +54,15 @@ def generate_constant_velocity_objects():
     constant_vel = [-0.30071041457826514, 1.212283498931664, -0.06523486597772561]
     constant_ang_vel = [-3.334549536739062, 1.2509361202748748, -4.838985965705394]
     return [
-        generate_obj_json_like("cube", "glass", "sliding", [2.0, 2.0, 2.0], [0.0, 0.0, 0.0], 0.9, "0.0"),
+        generate_obj_json_like("cube", "glass", "sliding", [2.0, 2.0, 2.0], [0.0, 0.0, 0.0], 0.9, "0.0 0.0 0.0"),
         generate_obj_json_like(
-            "ball", "glass", "sliding", constant_vel, constant_ang_vel, 0.661, "0.24", 0.6668, -2.6882
+            "ball", "glass", "sliding", constant_vel, constant_ang_vel, 0.661, "0.24 0.24 0.24", 0.6668, -2.6882
         ),
         generate_obj_json_like("ball", "rubber", "sliding",
                                [0.3, 0.0, 0.0],
                                [0.0, 0.0, 0.0],
                                0.4,
-                               "0.5",
+                               "0.5 0.5 0.5",
                                -0.8525, 0.4002),
 
     ]
@@ -70,30 +70,30 @@ def generate_constant_velocity_objects():
 
 def generate_stationary_objects():
     return [
-        generate_obj_json_like("cube", "glass", "stationary", [0, 0, 0], [0, 0, 0], 0.1, 0.6, 3.0, 0),
-        generate_obj_json_like("sphere", "glass", "stationary", [0, 0, 0], [0, 0, 0], 0.05, 0.4, 3.0, 2),
-        generate_obj_json_like("cylinder", "metal", "stationary", [0, 0, 0], [0, 0, 0], 0.2, 0.5, 0, 0)
+        generate_obj_json_like("cube", "glass", "stationary", [0, 0, 0], [0, 0, 0], 0.1, "0.6 0.6 0.6", 3.0, 0),
+        generate_obj_json_like("sphere", "glass", "stationary", [0, 0, 0], [0, 0, 0], 0.05, "0.4 0.4 0.4", 3.0, 2),
+        generate_obj_json_like("cylinder", "metal", "stationary", [0, 0, 0], [0, 0, 0], 0.2,"0.5 0.5 0.5", 0, 0)
     ]
 
 
 def generate_pure_rotation_objects():
     return [
-        generate_obj_json_like("ball", "metal", "sliding", [0, 0, 0], [0.0, 0.0, 20.0], 0.9, 0.0, -1.4587, -0.6467),
-        generate_obj_json_like("ball", "wood", "sliding", [0, 0, 0], [0, 0, 10], 0.8, 0.0, -0.5261, 0.8233)
+        generate_obj_json_like("ball", "metal", "sliding", [0, 0, 0], [0.0, 0.0, 20.0], 0.9, "0.0 0.0 0.0", -1.4587, -0.6467),
+        generate_obj_json_like("ball", "wood", "sliding", [0, 0, 0], [0, 0, 10], 0.8, "0.0 0.0 0.0", -0.5261, 0.8233)
     ]
 
 
 def generate_rolling_motion_objects():
     return [
-        generate_obj_json_like("ball", "metal", "sliding", [0, 0, 0], [20.0, 20.0, 20.0], 0.9, 0.0, 1.4587, -0.6467),
-        generate_obj_json_like("ball", "glass", "sliding", [0, 0, 0], [0, 10.5, 0], 0.8, 0.0, -0.5261, 0.8233)
+        generate_obj_json_like("ball", "metal", "sliding", [0, 0, 0], [20.0, 20.0, 20.0], 0.9, "0.0 0.0 0.0", 1.4587, -0.6467),
+        generate_obj_json_like("ball", "glass", "sliding", [0, 0, 0], [0, 10.5, 0], 0.8, "0.0 0.0 0.0", -0.5261, 0.8233)
     ]
 
 
 def generate_decelerating_objects():
     return [
-        generate_obj_json_like("cube", "metal", "sliding", [3.5, 0, 0], [0, 0, 0], 0.1, 0.6, -0.5261, 0.8233),
-        generate_obj_json_like("cube", "glass", "sliding", [-3.5, 0, 0], [0, 0, 0], 0.1, 0.6,  1.4587, -0.6467)
+        generate_obj_json_like("cube", "metal", "sliding", [3.5, 0, 0], [0, 0, 0], 0.1, "0.6 0.6 0.6", -0.5261, 0.8233),
+        generate_obj_json_like("cube", "glass", "sliding", [-3.5, 0, 0], [0, 0, 0], 0.1, "0.6 0.6 0.6",  1.4587, -0.6467)
     ]
 
 
@@ -114,7 +114,7 @@ def generate_inelastic_collision_objects():
                 3.322123085408281
             ],
             elasticity=0.1,
-            friction=0.3,
+            friction="0.3 0.3 0.3",
             x_position=-0.2113,
             y_position=-1.5136
         ),
@@ -133,7 +133,7 @@ def generate_inelastic_collision_objects():
                 -3.6053503279078503
             ],
             elasticity=0.1,
-            friction=0.6,
+            friction="0.6 0.6 0.6",
             x_position=-1.6099,
             y_position=0.0294
         ),
@@ -157,7 +157,7 @@ def generate_elastic_collision_objects():
                 1.0239316560435674
             ],
             elasticity=0.537,
-            friction=0.16,
+            friction="0.16 0.16 0.16",
             x_position=1.0161568949251112,
             y_position=1.0378052447706247
         ),
@@ -176,7 +176,7 @@ def generate_elastic_collision_objects():
                 2.7108616527921834
             ],
             elasticity=0.677,
-            friction=0.19,
+            friction="0.19 0.19 0.19",
             x_position=-0.9870242114298601,
             y_position=-0.9776275321723126
         ),
@@ -200,7 +200,7 @@ def generate_stationary_to_moving_objects():
                 1.0239316560435674
             ],
             elasticity=0.537,
-            friction=0.16,
+            friction="0.16 0.16 0.16",
             x_position=1.0161568949251112,
             y_position=1.0378052447706247
         ),
@@ -219,7 +219,7 @@ def generate_stationary_to_moving_objects():
                 0.0
             ],
             elasticity=0.677,
-            friction=0.19,
+            friction="0.19 0.19 0.19",
             x_position=-0.9870242114298601,
             y_position=-0.9776275321723126
         ),
@@ -228,15 +228,15 @@ def generate_stationary_to_moving_objects():
 
 def generate_moving_to_stopping_objects():
     return [
-        generate_obj_json_like("sphere", "rubber", "sliding", [6.0, 0, 0], [0, 0, 0], 0.4, 0.85),
-        generate_obj_json_like("cube", "cork", "sliding", [5.5, 0, 0], [0, 0, 0], 0.3, 0.75)
+        generate_obj_json_like("sphere", "rubber", "sliding", [6.0, 0, 0], [0, 0, 0], 0.4, "0.85 0.85 0.85"),
+        generate_obj_json_like("cube", "cork", "sliding", [5.5, 0, 0], [0, 0, 0], 0.3, "0.75 0.75 0.75")
     ]
 
 
 def generate_sliding_with_friction():
     return [
-        generate_obj_json_like("cube", "metal", "sliding", [4.5, 0, 0], [0, 0, 0], 0.1, 0.6, -0.5261, 0.8233),
-        generate_obj_json_like("cube", "glass", "sliding", [-4.5, 0, 0], [0, 0, 0], 0.1, 0.6,  1.4587, -0.6467)
+        generate_obj_json_like("cube", "metal", "sliding", [4.5, 0, 0], [0, 0, 0], 0.1, "0.6 0.6 0.6", -0.5261, 0.8233),
+        generate_obj_json_like("cube", "glass", "sliding", [-4.5, 0, 0], [0, 0, 0], 0.1, "0.6 0.6 0.6",  1.4587, -0.6467)
     ]
 
 

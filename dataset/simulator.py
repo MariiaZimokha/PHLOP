@@ -142,7 +142,7 @@ class Simulation:
         if objects is None:
             objects = self.__get_world_objects(num_objects)
         if camera is None:
-            camera = {"mode": 0, "init": {}}
+            camera = {"mode": 0}
 
         if floor is None:
             floor = self.floor.get_settings()
@@ -174,7 +174,7 @@ class Simulation:
 
         # Configure camera
         self.camera_settings.set_model(model, data)
-        self.camera_settings.set_init_settings(camera.get("init", {}))
+        self.camera_settings.set_init_settings(camera)
         camera_init_config = self.camera_settings.get_init_settings()
 
         # Initialize object velocities and IDs
@@ -209,7 +209,7 @@ class Simulation:
                 mujoco.mj_step(model, data)
 
                 if len(normal_frames) < data.time * framerate:
-                    if camera["mode"] == 1:
+                    if camera.get("mode", 0) == 1:
                         self.camera_settings.update_camera(num_objects, renderer)
 
                     # Render normal frame

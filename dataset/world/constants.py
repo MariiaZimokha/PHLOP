@@ -22,6 +22,7 @@ SHAPES = [Shapes.BALL, Shapes.CYLINDER, Shapes.CUBE, Shapes.BLOCK]
 
 MATERIAL_MIXTURES = {
     MaterialTypes.METAL: {
+        #  (mean, std, weight)
         "elasticity_dist": [(0.85, 0.02, 0.4), (0.92, 0.01, 0.6)],
         "density_dist": [
             (7850, 50, 0.30),  # Steel
@@ -34,6 +35,7 @@ MATERIAL_MIXTURES = {
             (7300, 200, 0.03),  # Cast iron
             (19320, 100, 0.02),  # Gold
         ],
+        #  (mean, std, weight)
         "friction_dist_lateral": [(0.28, 0.02, 0.5), (0.32, 0.02, 0.5)],
     },
     MaterialTypes.WOOD: {
@@ -43,6 +45,7 @@ MATERIAL_MIXTURES = {
             (600, 50, 0.3),  # Hardwoods
             (700, 50, 0.3),  # Dense hardwoods
         ],
+        #  (mean, std, weight)
         "friction_dist_lateral": [(0.45, 0.05, 0.6), (0.55, 0.05, 0.4)],
     },
     MaterialTypes.RUBBER: {

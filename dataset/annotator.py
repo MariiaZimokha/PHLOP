@@ -97,10 +97,10 @@ class Annotator:
             frame_annotation["objects"][object_id] = {
                 "velocity": velocity,
                 "angular_velocity": angular_velocity,
-                "active_labels": active_labels,
+                # "active_labels": active_labels,
                 "position": position,
                 "bbox": bbox,
-                "segment_polygons": [contour.tolist() for contour in seg_polygons],
+                # "segment_polygons": [contour.tolist() for contour in seg_polygons],
             }
 
         return frame_annotation

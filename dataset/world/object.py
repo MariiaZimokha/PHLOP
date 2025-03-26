@@ -90,7 +90,7 @@ class Object:
             "dimensions": dimensions,
             "mass": mass_val,
             "density": density_val,
-            "elasticity": float(f"{elasticity_val:.3f}"),  # round to 3 decimals
+            "elasticity": min(float(f"{elasticity_val:.3f}"), 1),  # round to 3 decimals
             "friction": friction_str,
             "visual": visual,
             "velocity": linear_velocity.tolist(),

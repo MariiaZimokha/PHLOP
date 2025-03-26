@@ -1,3 +1,4 @@
+import math
 import random
 import numpy as np
 import mujoco
@@ -30,21 +31,22 @@ class CameraSettings:
 
         if self.evaluation_mode:
             self.camera.lookat[:] = data.get("lookat", [random.uniform(-0.5, 0.5),
-                                             random.uniform(-0.5, 0.5), random.uniform(0, 0.5)])
+                                             random.uniform(-0.5, 0.5), random.uniform(0, 0.35)])
             self.camera.distance = data.get("distance", random.uniform(1.5, 4))
-            self.camera.azimuth = data.get("azimuth", random.uniform(-30, 0))
-            self.camera.elevation = data.get("elevation", random.uniform(-30, 0))
+            self.camera.azimuth = data.get("azimuth", random.uniform(0, 40))
+            self.camera.elevation = data.get("elevation", random.uniform(-30, self.camera.lookat[2]))
 
         else:
-            # specifies the point in 3D space that the camera is focused on
+            # Point in 3D space that the camera is focused on
             self.camera.lookat[:] = data.get("lookat", [random.uniform(-0.5, 0.5),
                                              random.uniform(-0.5, 0.5), random.uniform(0, 0.5)])
             # how far the camera is from the lookat point
-            self.camera.distance = data.get("distance", random.uniform(1.5, 3.5))
+            self.camera.distance = data.get("distance", random.uniform(1.0, 3.5))
             # horizontal angle of the camera relative to the lookat point
-            self.camera.azimuth = data.get("azimuth", random.uniform(-90, -30))
-            #  vertical angle of the camera relative to the lookat poin
-            self.camera.elevation = data.get("elevation", random.uniform(-30, 0))
+            self.camera.azimuth = data.get("azimuth", random.uniform(41, 360))
+            #  vertical angle of the camera relative to the lookat point
+            self.camera.elevation = data.get("elevation", random.uniform(-45, self.camera.lookat[2]))
+
 
         self.prev_camera_lookat = self.camera.lookat
         self.prev_camera_distance = self.camera.distance

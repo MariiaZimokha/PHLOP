@@ -21,7 +21,23 @@ height = 768
 # 024.0 x 768.
 sim = Simulation(obj, annotator=annotator, width=width, height=height)
 
-for i in tqdm(range(50)):
+# /Users/Marichka/Studing/Uni/Project/Iran/PHLOP/generated/0/obj.json
+import json
+
+# t = json.loads("/generated/0/obj.json")
+
+with open('generated/0/obj.json', 'r') as file:
+    data = json.load(file)
+
+
+# camera = data.get("world", {}).get("camera", {})
+# 
+# camera["lookat"] = [-0.5, -0.5, 0.35]
+# camera["azimuth"] = 0
+# camera["elevation"] = -45
+# del camera["elevation"]
+
+for i in tqdm(range(500)):
     num_objects = random.randrange(2, 8)
     # num_objects = 4
     path = f"generated/{i}/"
@@ -29,6 +45,13 @@ for i in tqdm(range(50)):
     if not os.path.exists(path):
         os.makedirs(path)
 
+    # out = sim.run_simulation(
+    #     # num_objects=num_objects,
+    #     objects=data["objects"],
+    #     floor=data.get("world", {}).get("floor", {}),
+    #     lights=data.get("world", {}).get("lights", {}),
+    #     camera=data.get("world", {}).get("camera", {}),
+    #     duration=5, path=path)
     out = sim.run_simulation(num_objects=num_objects, duration=5, path=path)
     video_file, file_path = out["video_file"], out["file_path"]
     video_annotator.annotate(
