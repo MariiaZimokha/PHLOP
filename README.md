@@ -61,25 +61,50 @@ Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units
     - **Range**: [-90°, 90°] - Positive values look up, negative values look down
 
 #### Floor
-- **friction**: Describes the interaction between objects and the floor surface
+- **friction**: Describes resistive interaction between objects and the floor surface; stored as three coefficients: static, dynamic (kinetic), and rotational (rolling) friction
 
-    - **friction_static**: Coefficient of static friction (resistance to initial motion).
-
-        - **Unit**: Unitless (coefficient)
-
-        - **Range**: [min_fric, max_fric]
-
-    - **friction_dynamic**: Coefficient of dynamic friction (resistance during motion).
+    - **Static**: Maximum resistive force before motion begins
 
         - **Unit**: Unitless (coefficient)
 
         - **Range**: [min_fric, max_fric]
+     
+        - **Physical Effect**: 	Force threshold to initiate sliding
+        \[
+          F_{s,\max} = \mu_s \times N = \mu_s \times (m \times g)\quad[\mathrm{N}]
+        \]
 
-     - **friction_spin**: Coefficient of  rotational friction (resistance to spinning motion).
+    - **Dynamic (kinetic)**: Constant resistive force during sliding:
+        - **Unit**: Unitless (coefficient)
+
+        - **Range**: [min_fric, max_fric]
+     
+        - **Physical Effect**: 	Resistance during sliding
+        \[
+          F_{k} = \mu_k \times N\quad[\mathrm{N}]
+        \]
+
+     - **Rolling friction**: Resistive torque opposing rolling
 
         - **Unit**: Unitless (coefficient)
 
         - **Range**: [min_fric, max_fric]
+      
+        - **Physical Effect**: Resistive torque opposing rolling
+       \[
+          \tau_{r} = \mu_r \times N \times R\quad[\mathrm{N\cdot m}]
+        \]
+
+  - Here,  
+    - \(N = m \times g\) is the normal force (kg·m/s²).  
+    - \(R\) is the object’s radius (m).  
+
+
+
+
+
+
+
 
 - **rgba**: Defines the color and transparency of the floor based on friction values.
         
