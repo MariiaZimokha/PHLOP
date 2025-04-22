@@ -49,10 +49,12 @@ class Object:
 
         elasticity_val = self.__sample_from_mixture(mixture_data["elasticity_dist"])
         density_val = self.__sample_from_mixture(mixture_data["density_dist"])
-        friction_static = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
-        friction_dynamic = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
-        friction_rolling = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
-        friction_str = f"{friction_static:.2f} {friction_dynamic:.2f} {friction_rolling:.2f}"
+        mu = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
+        friction_str = f"{mu:.2f} {mu:.2f} {mu:.2f}"
+        # friction_static = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
+        # friction_dynamic = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
+        # friction_rolling = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
+        # friction_str = f"{friction_static:.2f} {friction_dynamic:.2f} {friction_rolling:.2f}"
 
         visual = self.__get_visual(material)
 

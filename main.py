@@ -37,7 +37,7 @@ with open('generated/0/obj.json', 'r') as file:
 # camera["elevation"] = -45
 # del camera["elevation"]
 
-for i in tqdm(range(500)):
+for i in tqdm(range(1000)):
     num_objects = random.randrange(2, 8)
     # num_objects = 4
     path = f"generated/{i}/"
@@ -52,7 +52,7 @@ for i in tqdm(range(500)):
     #     lights=data.get("world", {}).get("lights", {}),
     #     camera=data.get("world", {}).get("camera", {}),
     #     duration=5, path=path)
-    out = sim.run_simulation(num_objects=num_objects, duration=5, path=path)
+    out = sim.run_simulation(num_objects=num_objects, duration=15, path=path)
     video_file, file_path = out["video_file"], out["file_path"]
     video_annotator.annotate(
         file_path=file_path,
