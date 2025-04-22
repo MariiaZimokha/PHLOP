@@ -61,25 +61,45 @@ Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units
     - **Range**: [-90°, 90°] - Positive values look up, negative values look down
 
 #### Floor
-- **friction**: Describes the interaction between objects and the floor surface
+- **friction**: Describes resistive interaction between objects and the floor surface; stored as three coefficients: static, dynamic (kinetic), and rotational (rolling) friction
 
-    - **friction_static**: Coefficient of static friction (resistance to initial motion).
-
-        - **Unit**: Unitless (coefficient)
-
-        - **Range**: [min_fric, max_fric]
-
-    - **friction_dynamic**: Coefficient of dynamic friction (resistance during motion).
+    - **Static**: Maximum resistive force before motion begins
 
         - **Unit**: Unitless (coefficient)
+     
+        - **Physical Effect**: 	Force threshold to initiate sliding
+        $$F_{s,\max} = \mu_s \times N = \mu_s \times (m \times g)\quad[\mathrm{N}]$$
 
-        - **Range**: [min_fric, max_fric]
+    - **Dynamic (kinetic)**: Constant resistive force during sliding:
+        - **Unit**: Unitless (coefficient)
+     
+        - **Physical Effect**: 	Resistance during sliding
+        $$F_{k} = \mu_k \times N\quad[\mathrm{N}]$$
 
-     - **friction_spin**: Coefficient of  rotational friction (resistance to spinning motion).
+     - **Rolling friction**: Resistive torque opposing rolling
 
         - **Unit**: Unitless (coefficient)
+      
+        - **Physical Effect**: Resistive torque opposing rolling
+       $$\tau_{r} = \mu_r \times N \times R\quad[\mathrm{N\cdot m}]$$
 
-        - **Range**: [min_fric, max_fric]
+  - Here,  
+    - **Normal force** (\(N\)): The reactive force perpendicular to the contact surface, supporting the object’s weight.  
+        - **Definition**:  
+            \[
+            N = m \times g
+            \]
+            where  
+            - \(m\) is the object’s mass (kg)  
+            - \(g\) is gravitational acceleration (≈ 9.81 m/s²)  
+
+        - **Units**: Newtons (N)  
+
+     
+    - \(R\) is the object’s radius (m).  
+
+
+    - **Range**: [min_fric, max_fric]
 
 - **rgba**: Defines the color and transparency of the floor based on friction values.
         
@@ -182,7 +202,20 @@ Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units
 
 **Mass** - kilograms (kg)
 
+- **Physical Meaning**: Resistance to acceleration (inertia)
+
+- **Units**: kg (derived from density × volume)
+
+- **Newton's 2nd Law**: Directly in F=ma
+
+
+
+
+
 **Velocity** - meters per second (m/s)
+- **Physical Meaning**: Rate of change of position/orientation
+
+- **Newton's 1st Law Connection**: Objects in motion stay in motion unless acted upon
 
 - v_x: x-component of velocity - measures the rate of change of position along the x-axis
 
@@ -191,6 +224,10 @@ Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units
 - v_z: z-component of velocity - measures the rate of change of position along the z-axis
     
 **Angular Velocity** - *radians per second **(rad/s)***, the rate of rotation of an object about an axis.
+
+- **Physical Meaning**: Rate of change of position/orientation
+
+- **Newton's 1st Law Connection**: Objects in motion stay in motion unless acted upon
 
 - **ω_x**: x-component of angular velocity
 
@@ -211,10 +248,25 @@ Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units
     - Also called "yaw rate" in some contexts
 
     
-**Density** - Mass / Volume = kg / m³
+**Density** - Mass / Volume = kg / m³:
 
-**Elasticity** - coefficients of restitution, which are unitless values between 0 and 1. These values indicate:
+- **Physical Meaning**: Mass per unit volume
 
-- **0**: Perfectly inelastic collision (no bounce)
+- **Units**: kg/m³ (scaled in simulation)
 
-- **1**: Perfectly elastic collision (no energy loss)
+- **Newton's 2nd Law Connection**: Affects mass (m = ρV) thus inertia (F=ma)
+
+
+**Elasticity(Restitution Coefficient)**: coefficients of restitution, which are unitless values between 0 and 1. 
+
+- **Physical Meaning**: Ratio of velocities after/before collision
+
+- **Newton's 3rd Law Connection**: Governs how collision forces interact
+
+- **Energy Interpretation**: Determines kinetic energy conservation in collisions
+
+- These values indicate:
+
+    - **0**: Perfectly inelastic collision (no bounce)
+
+    - **1**: Perfectly elastic collision (no energy loss)
