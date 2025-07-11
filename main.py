@@ -26,8 +26,8 @@ import json
 
 # t = json.loads("/generated/0/obj.json")
 
-with open('generated/0/obj.json', 'r') as file:
-    data = json.load(file)
+# with open('generated/0/obj.json', 'r') as file:
+#     data = json.load(file)
 
 
 # camera = data.get("world", {}).get("camera", {})
@@ -37,7 +37,7 @@ with open('generated/0/obj.json', 'r') as file:
 # camera["elevation"] = -45
 # del camera["elevation"]
 
-for i in tqdm(range(1000)):
+for i in tqdm(range(3000, 4000)):
     num_objects = random.randrange(2, 8)
     # num_objects = 4
     path = f"generated/{i}/"
