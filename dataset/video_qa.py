@@ -1,25 +1,18 @@
 import cv2
-import re
 import json
 import numpy as np
 import random
 
 
 def add_qa_to_video(questions_answers, object_json_file, output_path, num_objects):
-    json_file = object_json_file
-    qa_events = questions_answers
-    path = output_path
-
-    with open(json_file, 'r') as f:
+    with open(object_json_file, 'r') as f:
         sim_data = json.load(f)
-    # print("Simulation JSON keys:", sim_data.keys())
 
-    video_path = f"{path}output_video.mp4"
-    # video_path = f"{path}output_video_{num_objects}.mp4"
+    video_path = f"{output_path}output_video.mp4"
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print("Error opening video file.")
-        exit()
+        return
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps == 0:
@@ -29,10 +22,9 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    output_path = f'{output_path}output_with_qa.mp4'
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    output_with_qa_path = f'{output_path}output_with_qa.mp4'
+    out = cv2.VideoWriter(output_with_qa_path, fourcc, fps, (width, height))
 
-    # copy original video to output
     last_frame = None
     while True:
         ret, frame = cap.read()
@@ -42,10 +34,10 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
         out.write(frame)
     cap.release()
 
-    if len(qa_events) < 5:
-        sample_qa = qa_events
-    else:
-        sample_qa = random.sample(qa_events, 5)
+    sample_qa = (
+        questions_answers if len(questions_answers) < 5
+        else random.sample(questions_answers, 5)
+    )
 
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.8
@@ -55,11 +47,10 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
     shadow_offset = (2, 2)
     background_color = (0, 0, 0)
     background_alpha = 0.6
-
     line_type = cv2.LINE_AA
-    y0, dy = 50, 40
-    margin = 10
+    y0 = 50
     dy = 40
+    max_width = width - 100
 
     def wrap_text(text, max_width, font_face, font_scale, thickness):
         words = text.split(' ')
@@ -78,9 +69,11 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
 
     cumulative_text = []
     qa_frames = []
-    max_width = width - 100
 
-    for question, answer in sample_qa:
+    for qa in sample_qa:
+        question = qa["question"]
+        answer = qa["answer"]
+
         cumulative_text.append("Q: " + question)
         text_block = "\n\n".join(cumulative_text)
         frame_text = last_frame.copy()
@@ -89,12 +82,13 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
         text_height = num_lines * dy + (num_lines - 1) * 10
         background_rect = np.zeros((text_height, width, 3), dtype=np.uint8)
         background_rect[:] = background_color
-        background_rect = cv2.addWeighted(background_rect, background_alpha, np.zeros(
-            (text_height, width, 3), dtype=np.uint8), 1 - background_alpha, 0)
+        background_rect = cv2.addWeighted(background_rect, background_alpha,
+                                          np.zeros_like(background_rect), 1 - background_alpha, 0)
 
         y0_start = y0 - 10
-        frame_text[y0_start:y0_start+text_height, 0:width] = cv2.addWeighted(
-            frame_text[y0_start:y0_start+text_height, 0:width], 1 - background_alpha, background_rect, background_alpha, 0)
+        frame_text[y0_start:y0_start + text_height, 0:width] = cv2.addWeighted(
+            frame_text[y0_start:y0_start + text_height, 0:width], 1 - background_alpha,
+            background_rect, background_alpha, 0)
 
         y = y0
         for paragraph in text_block.split('\n\n'):
@@ -103,7 +97,8 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
                 cv2.putText(frame_text, line,
                             (50 + shadow_offset[0], y + shadow_offset[1]),
                             font, font_scale, shadow_color, thickness, line_type)
-                cv2.putText(frame_text, line, (50, y), font, font_scale, font_color, thickness, line_type)
+                cv2.putText(frame_text, line,
+                            (50, y), font, font_scale, font_color, thickness, line_type)
                 y += dy
             y += dy
 
@@ -117,12 +112,13 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
         text_height = num_lines * dy + (num_lines - 1) * 10
         background_rect = np.zeros((text_height, width, 3), dtype=np.uint8)
         background_rect[:] = background_color
-        background_rect = cv2.addWeighted(background_rect, background_alpha, np.zeros(
-            (text_height, width, 3), dtype=np.uint8), 1 - background_alpha, 0)
+        background_rect = cv2.addWeighted(background_rect, background_alpha,
+                                          np.zeros_like(background_rect), 1 - background_alpha, 0)
 
         y0_start = y0 - 10
-        frame_text[y0_start:y0_start+text_height, 0:width] = cv2.addWeighted(
-            frame_text[y0_start:y0_start+text_height, 0:width], 1 - background_alpha, background_rect, background_alpha, 0)
+        frame_text[y0_start:y0_start + text_height, 0:width] = cv2.addWeighted(
+            frame_text[y0_start:y0_start + text_height, 0:width], 1 - background_alpha,
+            background_rect, background_alpha, 0)
 
         y = y0
         for paragraph in text_block.split('\n\n'):
@@ -131,12 +127,11 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
                 cv2.putText(frame_text, line,
                             (50 + shadow_offset[0], y + shadow_offset[1]),
                             font, font_scale, shadow_color, thickness, line_type)
-                cv2.putText(frame_text, line, (50, y), font, font_scale, font_color, thickness, line_type)
+                cv2.putText(frame_text, line,
+                            (50, y), font, font_scale, font_color, thickness, line_type)
                 y += dy
             y += dy
-        # for i, line in enumerate(text_block.split('\n')):
-        #     y = y0 + i * dy
-        #     cv2.putText(frame_text, line, (50, y), font, font_scale, font_color, thickness, line_type)
+
         qa_frames.append(frame_text.copy())
 
     frames_per_display = int(fps * 1)
@@ -145,4 +140,4 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
             out.write(qa_frame)
 
     out.release()
-    # print("Output video saved as", output_path)
+    # print(f"Output video with QAs saved at: {output_with_qa_path}")
