@@ -1,5 +1,19 @@
-# PHLOP Project
-**P**hysics-grounded **H**ierarchical **L**atent space for **O**bject state and **P**resentation
+# PHLOP 
+**P**hysics-grounded **H**ierarchical **L**atent space for **O**bject state and **P**resentation.  
+
+PHLOP is an open dataset and benchmark designed to assess the physical
+reasoning capabilities of video–language models. It provides
+synthetic videos generated via the MuJoCo physics engine, along with
+multi‑modal annotations (RGB frames, segmentation masks, bounding boxes and
+per–frame taxonomy labels) and automatically generated question–answer pairs.
+These questions probe a wide range of Newtonian concepts—collision dynamics,
+rolling and sliding, energy dissipation, friction and more—and can be
+presented to models under different prompting conditions (video only,
+physics parameters, taxonomy labels or both).
+
+
+
+---
 
 ![PHLOP](assets/kikis-delivery-service-tired.gif)
 
@@ -27,7 +41,25 @@
 |                               |                             | ~~Drag Force Effects~~                            |
 
 
+### Getting started
+#### Prerequisites
+PHLOP relies on the [MuJoCo](https://github.com/google-deepmind/mujoco)
+physics engine for simulation and [PyTorch](https://pytorch.org/) for
+model inference.  Ensure you have a recent Python (3.9+) and install
+dependencies with:
 
+```bash
+pip install -r requirements.txt
+```
+
+
+#### Generating the dataset
+To reproduce the PHLOP dataset, run the provided generation script:
+
+```bash
+python main.py --output_dir generated/ --num_videos 10
+```
+This script uses controlled randomisation over object shapes, material properties, initial velocities and global scene parameters (camera, lighting, floor) to produce diverse scenes. It will write videos and associated JSON logs to the specified output directory.
 
 ### Settings
 Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units-are-unspecified 
