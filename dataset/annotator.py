@@ -1,11 +1,13 @@
 import numpy as np
 import mujoco
 import cv2
+from collections import deque
 
 
 class Annotator:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, history_len=10) -> None:
+        self.vel_history = {}
+        self.history_len = history_len
 
     def extract_polygons(self, seg_frame):
         seg_ids = seg_frame[:, :, 0]
@@ -51,13 +53,13 @@ class Annotator:
         return [[0, 0], [0, 0]]
 
     def get_annotation(self, seg_frame, objects=[], data=None, model=None):
-        STOP_LIN_SPEED_THRESHOLD = 0.05  # m/s
+        STOP_LIN_SPEED_THRESHOLD = 0.01  # m/s
         STOP_ANG_SPEED_THRESHOLD = 0.05  # rad/s
         TIP_ANGLE_THRESHOLD_DEG = 45.0  # degrees
 
         polygons_dict = self.extract_polygons(seg_frame)
-
         frame_annotation = {"time": data.time, "objects": {}}
+
         for i, obj in enumerate(objects):
             object_id = obj.get("id", f"geom_{obj['geom_id']}")
             gid = obj["geom_id"]
@@ -68,23 +70,39 @@ class Annotator:
             joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
             adr = model.jnt_dofadr[joint_id]
 
-            velocity = data.qvel[adr: adr + 3].tolist()
-            angular_velocity = data.qvel[adr + 3: adr + 6].tolist()
-            position = data.qpos[adr: adr + 3].tolist()
+            velocity = data.qvel[adr : adr + 3].tolist()
+            angular_velocity = data.qvel[adr + 3 : adr + 6].tolist()
+            position = data.qpos[adr : adr + 3].tolist()
 
             active_labels = []
 
-            # Stopped detection
-            speed_lin = np.linalg.norm(velocity)
-            speed_ang = np.linalg.norm(angular_velocity)
-            is_stopped = (
-                speed_lin < STOP_LIN_SPEED_THRESHOLD
-                and speed_ang < STOP_ANG_SPEED_THRESHOLD
+            if object_id not in self.vel_history:
+                self.vel_history[object_id] = deque(maxlen=self.history_len)
+
+            current_lin_speed = np.linalg.norm(velocity)
+            self.vel_history[object_id].append(current_lin_speed)
+
+            # Object is stopped ONLY if ALL recent speeds are below threshold
+            # This filters out collision jitters
+            is_stable_stop = all(
+                v < STOP_LIN_SPEED_THRESHOLD for v in self.vel_history[object_id]
             )
+
+            # We also ensure the history is full (don't stop on frame 1)
+            is_stopped = (
+                is_stable_stop and len(self.vel_history[object_id]) == self.history_len
+            )
+            # # Stopped detection
+            # speed_lin = np.linalg.norm(velocity)
+            # speed_ang = np.linalg.norm(angular_velocity)
+            # is_stopped = (
+            #     speed_lin < STOP_LIN_SPEED_THRESHOLD
+            #     and speed_ang < STOP_ANG_SPEED_THRESHOLD
+            # )
             if is_stopped:
                 active_labels.append("Stopped")
 
-            quat = data.qpos[adr + 3: adr + 7]
+            quat = data.qpos[adr + 3 : adr + 7]
             rot_mat = np.zeros((3, 3))
             mujoco.mju_quat2Mat(rot_mat.ravel(), quat)
 

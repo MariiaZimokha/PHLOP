@@ -1,4 +1,3 @@
-
 FLOOR_TEXTURE = ["checkerboard", "flat", "gradient"]
 MODES = ["collision", "sliding", "stationary", "offset"]
 
@@ -48,7 +47,7 @@ MATERIAL_MIXTURES = {
     MaterialTypes.RUBBER: {
         "elasticity_dist": [(0.90, 0.05, 0.7), (0.98, 0.05, 0.3)],
         "density_dist": [
-            (900, 50, 0.4),   # Natural rubber
+            (900, 50, 0.4),  # Natural rubber
             (1100, 50, 0.3),  # Synthetic rubber
             (1200, 50, 0.3),  # High-density rubber
         ],

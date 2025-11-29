@@ -3,8 +3,6 @@ from dataset.taxonomy import PhysicsTaxonomy
 import numpy as np
 import mujoco
 import imageio
-import json
-import cv2
 
 from dataset.utils import save_file, set_physics_properties, set_position_and_velocity
 from dataset.world.camera import CameraSettings
@@ -25,10 +23,11 @@ class Simulation:
         self.seg_color_map = {}
 
         # XML template for the MuJoCo simulation
+        # <option timestep="0.0005" gravity="0 0 -9.81"/>
         self.header = f"""
 <mujoco model="dynamic_objects">
     <size nconmax="200" njmax="200"/>
-    <option timestep="0.0005" gravity="0 0 -9.81"/>
+    <option timestep="0.002" gravity="0 0 -9.81" density="1.2" viscosity="0.0001"/>
     <visual>
         <global offwidth="{self.width}" offheight="{self.height}" />
         <quality shadowsize="2048" />
@@ -66,7 +65,8 @@ class Simulation:
         for geom_id in unique_ids:
             if geom_id not in self.seg_color_map:
                 self.seg_color_map[geom_id] = (
-                    [0, 0, 0] if geom_id == 0  # floor
+                    [0, 0, 0]
+                    if geom_id == 0  # floor
                     else np.random.randint(0, 255, size=3).tolist()  # random color
                 )
             mask[seg_ids == geom_id] = self.seg_color_map[geom_id]
@@ -99,7 +99,7 @@ class Simulation:
                 <body name="obj{i}" pos="{obj["init_possition_x"]:.4f} {obj["init_possition_y"]:.4f} {obj["base_z"]:.4f}">
                     <freejoint name="obj{i}_free"/>
                     <geom name="geom_obj{i}" type="{obj["geom_type"]}" size="{obj["size_str"]}" mass="{obj["mass"]}"
-                          friction="{obj['friction']}" material="{mat_name}" group="1"/>
+                          friction="{obj["friction"]}" material="{mat_name}" group="1"/>
                 </body>"""
             )
 
@@ -114,9 +114,9 @@ class Simulation:
         light_xml = ""
         for i, light in enumerate(lights):
             light_xml += f"""
-            <light name="light{i}" pos="{light['pos'][0]} {light['pos'][1]} {light['pos'][2]}" 
-                diffuse="{light['diffuse']}" specular="{light['specular']}" 
-                cutoff="{light['cutoff']}" directional="{str(light['directional']).lower()}"/>
+            <light name="light{i}" pos="{light["pos"][0]} {light["pos"][1]} {light["pos"][2]}" 
+                diffuse="{light["diffuse"]}" specular="{light["specular"]}" 
+                cutoff="{light["cutoff"]}" directional="{str(light["directional"]).lower()}"/>
             """
 
         return "".join(asset_defs), "".join(bodies_xml), light_xml
@@ -131,7 +131,15 @@ class Simulation:
         return colliding_pairs
 
     def run_simulation(
-        self, num_objects=3, objects=None, duration=5.0, framerate=25, camera=None, path="", floor=None, lights=None
+        self,
+        num_objects=3,
+        objects=None,
+        duration=5.0,
+        framerate=25,
+        camera=None,
+        path="",
+        floor=None,
+        lights=None,
     ):
         """
         camera:
@@ -151,12 +159,13 @@ class Simulation:
             lights = self.light.get_settings(2)
 
         world_floor = self.world_floor.format(
-            floor_rgba=floor["rgba"],
-            floor_friction=floor["friction"]
+            floor_rgba=floor["rgba"], floor_friction=floor["friction"]
         )
 
         num_objects = len(objects)
-        asset_defs, bodies_xml, light_xml = self.__build_assets_and_bodies(objects, floor, lights)
+        asset_defs, bodies_xml, light_xml = self.__build_assets_and_bodies(
+            objects, floor, lights
+        )
 
         simulation_xml = (
             f"{self.header}"
@@ -179,9 +188,11 @@ class Simulation:
 
         # Initialize object velocities and IDs
         for i, obj in enumerate(objects):
-            joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free")
+            joint_id = mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free"
+            )
             adr = model.jnt_dofadr[joint_id]
-            data.qvel[adr: adr + 6] = [*obj["velocity"], *obj["angular_velocity"]]
+            data.qvel[adr : adr + 6] = [*obj["velocity"], *obj["angular_velocity"]]
 
             geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, f"geom_obj{i}")
             objects[i]["geom_id"] = geom_id
@@ -192,10 +203,16 @@ class Simulation:
             obj["id"]: {
                 "velocity": [float(x) for x in obj["velocity"]],
                 "angular_velocity": [float(x) for x in obj["angular_velocity"]],
-                "position": [obj["init_possition_x"], obj["init_possition_y"], obj["base_z"]],
+                "position": [
+                    obj["init_possition_x"],
+                    obj["init_possition_y"],
+                    obj["base_z"],
+                ],
             }
             for obj in objects
         }
+
+        print('camera["mode"] ', camera["mode"])
 
         normal_frames = []
         segmentation_frames = []
@@ -205,31 +222,36 @@ class Simulation:
         with mujoco.Renderer(model, self.height, self.width) as renderer:
             renderer.enable_segmentation_rendering()
             while data.time < duration:
-
                 mujoco.mj_step(model, data)
 
                 if len(normal_frames) < data.time * framerate:
                     if camera["mode"] == 1:
                         self.camera_settings.update_camera(num_objects, renderer)
-
-                    # Render normal frame
+                    else:
+                        # static — just update scene normally
+                        renderer.update_scene(data, camera=self.camera_settings.camera)
                     renderer.disable_segmentation_rendering()
-                    renderer.update_scene(data, camera=self.camera_settings.camera)
                     normal_frames.append(renderer.render())
 
                     # Render segmentation frame
                     renderer.enable_segmentation_rendering()
                     seg_frame = renderer.render()
-                    segmentation_frames.append(self.__convert_segmentation_to_mask(seg_frame))
+                    segmentation_frames.append(
+                        self.__convert_segmentation_to_mask(seg_frame)
+                    )
 
                     # Generate annotations
-                    annotation = self.annotator.get_annotation(seg_frame, objects, data, model)
+                    annotation = self.annotator.get_annotation(
+                        seg_frame, objects, data, model
+                    )
                     pairs = self.__detect_collisions(model, data)
                     current_time = data.time
                     dt = current_time - prev_time
                     # df = 1.0 / framerate
                     prev_time = current_time
-                    events = physics.get_taxonomy(model, data, dt, prev_frame_data, annotation["objects"])
+                    events = physics.get_taxonomy(
+                        model, data, dt, prev_frame_data, annotation["objects"]
+                    )
 
                     annotation_all = {
                         obj_id: {
@@ -237,37 +259,45 @@ class Simulation:
                             "taxonomy": events.get(obj_id, {}),
                             "prev_data": prev_frame_data.get(obj_id, {}),
                         }
-                        for obj_id in set(annotation["objects"].keys()).union(events.keys())
+                        for obj_id in set(annotation["objects"].keys()).union(
+                            events.keys()
+                        )
                     }
 
-                    annotation_frames.append({
-                        "time": current_time,
-                        "objects": annotation_all,
-                        "interactions": pairs,
-                    })
+                    annotation_frames.append(
+                        {
+                            "time": current_time,
+                            "objects": annotation_all,
+                            "interactions": pairs,
+                        }
+                    )
 
                     # Update previous frame data
                     for i, obj in enumerate(objects):
                         obj_id = obj["id"]
-                        joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free")
+                        joint_id = mujoco.mj_name2id(
+                            model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free"
+                        )
                         adr = model.jnt_dofadr[joint_id]
                         prev_frame_data[obj_id] = {
-                            "velocity": [float(x) for x in data.qvel[adr: adr + 3].tolist()],
-                            "angular_velocity": [float(x) for x in data.qvel[adr + 3: adr + 6].tolist()],
-                            "position": data.qpos[adr: adr + 3].tolist(),
+                            "velocity": [
+                                float(x) for x in data.qvel[adr : adr + 3].tolist()
+                            ],
+                            "angular_velocity": [
+                                float(x) for x in data.qvel[adr + 3 : adr + 6].tolist()
+                            ],
+                            "position": data.qpos[adr : adr + 3].tolist(),
                         }
 
         normal_video_filename = f"{path}simulation_objects.mp4"
         segmentation_video_filename = f"{path}simulation_objects_segmentation.mp4"
-        imageio.mimsave(normal_video_filename, normal_frames, fps=framerate, codec='libx264')
+        imageio.mimsave(
+            normal_video_filename, normal_frames, fps=framerate, codec="libx264"
+        )
         imageio.mimsave(segmentation_video_filename, segmentation_frames, fps=framerate)
 
         data = {
-            "world": {
-                "floor": floor,
-                "camera": camera_init_config,
-                "lights": lights
-            },
+            "world": {"floor": floor, "camera": camera_init_config, "lights": lights},
             "objects": objects,
             "frames": annotation_frames,
         }

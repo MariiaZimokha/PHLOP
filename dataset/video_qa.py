@@ -5,7 +5,7 @@ import random
 
 
 def add_qa_to_video(questions_answers, object_json_file, output_path, num_objects):
-    with open(object_json_file, 'r') as f:
+    with open(object_json_file, "r") as f:
         sim_data = json.load(f)
 
     video_path = f"{output_path}output_video.mp4"
@@ -21,8 +21,8 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    output_with_qa_path = f'{output_path}output_with_qa.mp4'
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    output_with_qa_path = f"{output_path}output_with_qa.mp4"
     out = cv2.VideoWriter(output_with_qa_path, fourcc, fps, (width, height))
 
     last_frame = None
@@ -35,7 +35,8 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
     cap.release()
 
     sample_qa = (
-        questions_answers if len(questions_answers) < 5
+        questions_answers
+        if len(questions_answers) < 5
         else random.sample(questions_answers, 5)
     )
 
@@ -53,17 +54,17 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
     max_width = width - 100
 
     def wrap_text(text, max_width, font_face, font_scale, thickness):
-        words = text.split(' ')
+        words = text.split(" ")
         lines = []
-        current_line = ''
+        current_line = ""
         for word in words:
-            test_line = current_line + word + ' '
+            test_line = current_line + word + " "
             text_size = cv2.getTextSize(test_line, font_face, font_scale, thickness)[0]
             if text_size[0] <= max_width:
                 current_line = test_line
             else:
                 lines.append(current_line.strip())
-                current_line = word + ' '
+                current_line = word + " "
         lines.append(current_line.strip())
         return lines
 
@@ -78,27 +79,51 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
         text_block = "\n\n".join(cumulative_text)
         frame_text = last_frame.copy()
 
-        num_lines = len(text_block.split('\n'))
+        num_lines = len(text_block.split("\n"))
         text_height = num_lines * dy + (num_lines - 1) * 10
         background_rect = np.zeros((text_height, width, 3), dtype=np.uint8)
         background_rect[:] = background_color
-        background_rect = cv2.addWeighted(background_rect, background_alpha,
-                                          np.zeros_like(background_rect), 1 - background_alpha, 0)
+        background_rect = cv2.addWeighted(
+            background_rect,
+            background_alpha,
+            np.zeros_like(background_rect),
+            1 - background_alpha,
+            0,
+        )
 
         y0_start = y0 - 10
-        frame_text[y0_start:y0_start + text_height, 0:width] = cv2.addWeighted(
-            frame_text[y0_start:y0_start + text_height, 0:width], 1 - background_alpha,
-            background_rect, background_alpha, 0)
+        frame_text[y0_start : y0_start + text_height, 0:width] = cv2.addWeighted(
+            frame_text[y0_start : y0_start + text_height, 0:width],
+            1 - background_alpha,
+            background_rect,
+            background_alpha,
+            0,
+        )
 
         y = y0
-        for paragraph in text_block.split('\n\n'):
+        for paragraph in text_block.split("\n\n"):
             wrapped_lines = wrap_text(paragraph, max_width, font, font_scale, thickness)
             for line in wrapped_lines:
-                cv2.putText(frame_text, line,
-                            (50 + shadow_offset[0], y + shadow_offset[1]),
-                            font, font_scale, shadow_color, thickness, line_type)
-                cv2.putText(frame_text, line,
-                            (50, y), font, font_scale, font_color, thickness, line_type)
+                cv2.putText(
+                    frame_text,
+                    line,
+                    (50 + shadow_offset[0], y + shadow_offset[1]),
+                    font,
+                    font_scale,
+                    shadow_color,
+                    thickness,
+                    line_type,
+                )
+                cv2.putText(
+                    frame_text,
+                    line,
+                    (50, y),
+                    font,
+                    font_scale,
+                    font_color,
+                    thickness,
+                    line_type,
+                )
                 y += dy
             y += dy
 
@@ -108,27 +133,51 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
         text_block = "\n\n".join(cumulative_text)
         frame_text = last_frame.copy()
 
-        num_lines = len(text_block.split('\n'))
+        num_lines = len(text_block.split("\n"))
         text_height = num_lines * dy + (num_lines - 1) * 10
         background_rect = np.zeros((text_height, width, 3), dtype=np.uint8)
         background_rect[:] = background_color
-        background_rect = cv2.addWeighted(background_rect, background_alpha,
-                                          np.zeros_like(background_rect), 1 - background_alpha, 0)
+        background_rect = cv2.addWeighted(
+            background_rect,
+            background_alpha,
+            np.zeros_like(background_rect),
+            1 - background_alpha,
+            0,
+        )
 
         y0_start = y0 - 10
-        frame_text[y0_start:y0_start + text_height, 0:width] = cv2.addWeighted(
-            frame_text[y0_start:y0_start + text_height, 0:width], 1 - background_alpha,
-            background_rect, background_alpha, 0)
+        frame_text[y0_start : y0_start + text_height, 0:width] = cv2.addWeighted(
+            frame_text[y0_start : y0_start + text_height, 0:width],
+            1 - background_alpha,
+            background_rect,
+            background_alpha,
+            0,
+        )
 
         y = y0
-        for paragraph in text_block.split('\n\n'):
+        for paragraph in text_block.split("\n\n"):
             wrapped_lines = wrap_text(paragraph, max_width, font, font_scale, thickness)
             for line in wrapped_lines:
-                cv2.putText(frame_text, line,
-                            (50 + shadow_offset[0], y + shadow_offset[1]),
-                            font, font_scale, shadow_color, thickness, line_type)
-                cv2.putText(frame_text, line,
-                            (50, y), font, font_scale, font_color, thickness, line_type)
+                cv2.putText(
+                    frame_text,
+                    line,
+                    (50 + shadow_offset[0], y + shadow_offset[1]),
+                    font,
+                    font_scale,
+                    shadow_color,
+                    thickness,
+                    line_type,
+                )
+                cv2.putText(
+                    frame_text,
+                    line,
+                    (50, y),
+                    font,
+                    font_scale,
+                    font_color,
+                    thickness,
+                    line_type,
+                )
                 y += dy
             y += dy
 

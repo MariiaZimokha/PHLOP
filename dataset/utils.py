@@ -76,14 +76,14 @@ def set_physics_properties(obj):
             volume = side**3
             base_z = side / 2
             # half-extents
-            size_str = f"{side/2:.4f} {side/2:.4f} {side/2:.4f}"
+            size_str = f"{side / 2:.4f} {side / 2:.4f} {side / 2:.4f}"
         else:
             length = dims["length"]
             width = dims["width"]
             height = dims["height"]
             volume = length * width * height
             base_z = height / 2
-            size_str = f"{length/2:.4f} {width/2:.4f} {height/2:.4f}"
+            size_str = f"{length / 2:.4f} {width / 2:.4f} {height / 2:.4f}"
         geom_type = "box"
 
     obj["volume"] = volume

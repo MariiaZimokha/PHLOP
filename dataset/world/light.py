@@ -13,7 +13,9 @@ class Light:
         for _ in range(num_lights):
             while True:
                 pos = self._generate_random_position()
-                if all(self._is_far_enough(pos, existing_pos) for existing_pos in positions):
+                if all(
+                    self._is_far_enough(pos, existing_pos) for existing_pos in positions
+                ):
                     positions.append(pos)
                     break
 
@@ -23,7 +25,7 @@ class Light:
                 # reflection of light from shiny surfaces
                 "specular": self._generate_specular(),
                 "cutoff": random.uniform(cutoff_range[0], cutoff_range[1]),
-                "directional": False
+                "directional": False,
             }
             lights.append(light)
 

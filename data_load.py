@@ -17,7 +17,7 @@ class PHOLPhysicsDataset(Dataset):
         video_transform=None,
         mask_transform=None,
         include_qa: bool = False,
-        fps: int = 25
+        fps: int = 25,
     ):
         super().__init__()
         self.root = root
@@ -25,8 +25,9 @@ class PHOLPhysicsDataset(Dataset):
         valid = []
         for d in all_dirs:
             sd = os.path.join(root, d)
-            if os.path.isfile(os.path.join(sd, "obj.json")) and \
-               os.path.isfile(os.path.join(sd, "simulation_objects.mp4")):
+            if os.path.isfile(os.path.join(sd, "obj.json")) and os.path.isfile(
+                os.path.join(sd, "simulation_objects.mp4")
+            ):
                 valid.append(d)
 
         numeric = sorted([d for d in valid if d.isdigit()], key=lambda x: int(x))
@@ -36,14 +37,16 @@ class PHOLPhysicsDataset(Dataset):
         print("valid", len(valid))
         print("numeric", len(numeric))
         print("non_numeric", len(non_numeric))
-        print(" self.scenes ", len(self.scenes),  self.scenes[0])
+        print(" self.scenes ", len(self.scenes), self.scenes[0])
 
         self.fps = fps
         self.video_transform = video_transform or (lambda x: x)
         self.mask_transform = mask_transform or (lambda x: x)
         self.include_qa = include_qa
         self._collision_re = re.compile(r"collision", re.IGNORECASE)
-        self._motion_re = re.compile(r"sliding|rolling|stationary|accelerating|decelerating", re.IGNORECASE)
+        self._motion_re = re.compile(
+            r"sliding|rolling|stationary|accelerating|decelerating", re.IGNORECASE
+        )
         self._stationary_re = re.compile(r"stationary", re.IGNORECASE)
         self.MIN_VISIBLE_SIZE = 10
 
@@ -75,7 +78,10 @@ class PHOLPhysicsDataset(Dataset):
                 "friction": [float(x) for x in fr] if fr else [0.4],
                 "elasticity": elasticity,
                 "velocity": velocity,
-                "position": [float(obj.get(f"init_possition_{ax}", 0)) for ax in ["x", "y"]] + [0],
+                "position": [
+                    float(obj.get(f"init_possition_{ax}", 0)) for ax in ["x", "y"]
+                ]
+                + [0],
                 "material": obj.get("material", "unknown"),
                 "shape": shape,
                 "color": color_name,
@@ -88,7 +94,9 @@ class PHOLPhysicsDataset(Dataset):
                 return True
             for o in fr.get("objects", {}).values():
                 for tax in o.get("taxonomy", []):
-                    if any(self._collision_re.search(lbl) for lbl in tax.get("labels", [])):
+                    if any(
+                        self._collision_re.search(lbl) for lbl in tax.get("labels", [])
+                    ):
                         return True
         return False
 
@@ -115,7 +123,9 @@ class PHOLPhysicsDataset(Dataset):
         for fr in frames:
             for obj_state in fr.get("objects", {}).values():
                 for tax in obj_state.get("taxonomy", []):
-                    if any(self._stationary_re.search(lbl) for lbl in tax.get("labels", [])):
+                    if any(
+                        self._stationary_re.search(lbl) for lbl in tax.get("labels", [])
+                    ):
                         return True
         return False
 
@@ -129,7 +139,7 @@ class PHOLPhysicsDataset(Dataset):
 
         for frame in annotations.get("frames", []):
             for interaction in frame.get("interactions", []):
-                involved_ids = [f"geom_obj{int(oid)-1}" for oid in interaction]
+                involved_ids = [f"geom_obj{int(oid) - 1}" for oid in interaction]
                 # if f"geom_obj{int(oid)-1}" in valid_ids]
                 if len(involved_ids) >= 2:
                     collision_pairs.add(tuple(sorted(involved_ids)))
@@ -155,7 +165,7 @@ class PHOLPhysicsDataset(Dataset):
             for interaction in frame.get("interactions", []):
                 for oid in interaction:
                     # geom_obj1
-                    obj_id = f"geom_obj{int(oid)-1}"
+                    obj_id = f"geom_obj{int(oid) - 1}"
                     obj_state = objects.get(obj_id)
                     if not obj_state:
                         continue
@@ -168,14 +178,15 @@ class PHOLPhysicsDataset(Dataset):
         #     for obj_id, obj_state in fr.get("objects", {}).items():
         #         for tax in obj_state.get("taxonomy", []):
         #             if any(self._collision_re.search(lbl) for lbl in tax.get("labels", [])):
-                        # collision_counts[obj_id] += 1
+        # collision_counts[obj_id] += 1
 
         if not collision_counts:
             return None
 
         max_count = max(collision_counts.values())
-        most_collided = [obj_id for obj_id, count in collision_counts.items()
-                         if count == max_count]
+        most_collided = [
+            obj_id for obj_id, count in collision_counts.items() if count == max_count
+        ]
         # print("most_collided", most_collided)
 
         return most_collided
@@ -185,14 +196,14 @@ class PHOLPhysicsDataset(Dataset):
 
     def _count_state_transitions(self, taxonomy):
         transitions = {
-            'stopped_objects': set(),
-            'moving_to_stationary': set(),
-            'stationary_to_moving': set(),
-            'rolling': set(),
+            "stopped_objects": set(),
+            "moving_to_stationary": set(),
+            "stationary_to_moving": set(),
+            "rolling": set(),
         }
 
         # Rolling Motion
-# Rolling Motion With Slipping
+        # Rolling Motion With Slipping
 
         object_behaviors = {}
         for obj_id, state_sequence in taxonomy.items():
@@ -201,45 +212,66 @@ class PHOLPhysicsDataset(Dataset):
                 current_state = states[-1] if states else None
 
                 if current_state:
-                    if current_state.lower() in ["rolling motion", "rolling motion with slipping"]:
+                    if current_state.lower() in [
+                        "rolling motion",
+                        "rolling motion with slipping",
+                    ]:
                         transitions["rolling"].add(obj_id)
 
                 # Check state transitions
                 if prev_state and current_state:
-                    prev_moving = any(t in prev_state.lower()
-                                      for t in ['moving', 'accelerating', 'decelerating'])
-                    curr_stopped = any(t in current_state.lower()
-                                       for t in ['friction stop', 'stationary'])
+                    prev_moving = any(
+                        t in prev_state.lower()
+                        for t in ["moving", "accelerating", "decelerating"]
+                    )
+                    curr_stopped = any(
+                        t in current_state.lower()
+                        for t in ["friction stop", "stationary"]
+                    )
 
                     if prev_moving and curr_stopped:
                         # transitions['moving_to_stationary'][obj_id] += 1
-                        transitions['moving_to_stationary'].add(obj_id)
+                        transitions["moving_to_stationary"].add(obj_id)
 
-                    prev_stopped = any(t in prev_state.lower()
-                                       for t in ['friction stop', 'stationary'])
-                    curr_moving = any(t in current_state.lower()
-                                      for t in ['accelerating'])
+                    prev_stopped = any(
+                        t in prev_state.lower() for t in ["friction stop", "stationary"]
+                    )
+                    curr_moving = any(
+                        t in current_state.lower() for t in ["accelerating"]
+                    )
 
-                    check_label = any(t in [current_state.lower()] for t in ['stationary to moving'])
-                    if prev_stopped and curr_moving and any(t in [prev_state.lower(), current_state.lower()] for t in ['stationary to moving']):
+                    check_label = any(
+                        t in [current_state.lower()] for t in ["stationary to moving"]
+                    )
+                    if (
+                        prev_stopped
+                        and curr_moving
+                        and any(
+                            t in [prev_state.lower(), current_state.lower()]
+                            for t in ["stationary to moving"]
+                        )
+                    ):
                         # print("prev_state, current_state", prev_state, current_state)
                         # print("prev_stopped", prev_stopped)
                         # print("curr_moving", curr_moving)
                         # print("check_label", check_label)
                         # transitions['stationary_to_moving'][obj_id] += 1
-                        transitions['stationary_to_moving'].add(obj_id)
+                        transitions["stationary_to_moving"].add(obj_id)
 
                 prev_state = current_state
 
             # Check if ever stopped
-            if any('stopped' in s.lower() or 'stationary' in s.lower()
-                   for states in state_sequence for s in states):
-                transitions['stopped_objects'].add(obj_id)
+            if any(
+                "stopped" in s.lower() or "stationary" in s.lower()
+                for states in state_sequence
+                for s in states
+            ):
+                transitions["stopped_objects"].add(obj_id)
 
         result = {
-            'stopped_objects': len(transitions['stopped_objects']),
-            'moving_to_stationary': len(transitions['moving_to_stationary']),
-            'stationary_to_moving': len(transitions['stationary_to_moving'])
+            "stopped_objects": len(transitions["stopped_objects"]),
+            "moving_to_stationary": len(transitions["moving_to_stationary"]),
+            "stationary_to_moving": len(transitions["stationary_to_moving"]),
         }
         return transitions
 
@@ -277,107 +309,121 @@ class PHOLPhysicsDataset(Dataset):
         #     ])
 
         # scene questions
-        qas.extend([
-            {
-                # "question": "Based on the video, do any objects come into contact or collide with each other during the scene?",
-                # "question": "Does the video show any instances where two or more objects make physical contact or collide with each other?",
-                # "question": "Do any objects collide in this scene?",
-                "question": "Are there any moments in the video where two or more objects collide or make physical contact?",
-                "answer": "Yes" if has_collisions else "No"
-            },
-            {
-                # "question": "How many distinct physical objects appear in the scene?",
-                # "question": "What is the total count of visually distinct physical objects present at any point throughout the video scene?",
-                "question": "How many distinct physical objects appear during the video?",
-                # "question": "How many objects are in this scene?",
-                "answer": str(len(props))
-            }
-        ])
+        qas.extend(
+            [
+                {
+                    # "question": "Based on the video, do any objects come into contact or collide with each other during the scene?",
+                    # "question": "Does the video show any instances where two or more objects make physical contact or collide with each other?",
+                    # "question": "Do any objects collide in this scene?",
+                    "question": "Are there any moments in the video where two or more objects collide or make physical contact?",
+                    "answer": "Yes" if has_collisions else "No",
+                },
+                {
+                    # "question": "How many distinct physical objects appear in the scene?",
+                    # "question": "What is the total count of visually distinct physical objects present at any point throughout the video scene?",
+                    "question": "How many distinct physical objects appear during the video?",
+                    # "question": "How many objects are in this scene?",
+                    "answer": str(len(props)),
+                },
+            ]
+        )
 
         transitions = self._count_state_transitions(taxonomy)
         # print("transitions", transitions)
-        qas.extend([
-            {
-                "question": "How many objects come to a complete stop during the video that we can see?",
-                # "question": "How many objects have stopped in the video?",
-                "answer": str(len(transitions['stopped_objects']))
-            },
-            # {
-            #     "question": "How many objects slow down and eventually stop during the video?",
-            #     # "question": "How many objects transition from moving to stationary states (i.e., decelerate to a stop) during the video?",
-            #     # "question": "How many objects changing state from moving towards stationary (deacelerating) state during the video?",
-            #     "answer": str(len(transitions['moving_to_stationary']))
-            # },
-            {
-                # "question": "Based on the video, how many distinct objects exhibit rolling motion at any point during the scene?",
-                "question": "How many objects display rolling motion at any point in the video?",
-                # "question": "How many unique objects exhibit rotational motion characteristic of rolling at any point during the video observation?",
-                "answer": str(len(transitions['rolling']))
-                # "answer": f"{len(transitions["rolling"])}"
-            }
-            # {
-            #     "question": "How many objects go from stationary to moving state in the video?",
-            #     "answer": str(len(transitions['stationary_to_moving']))
-            # }
-        ])
+        qas.extend(
+            [
+                {
+                    "question": "How many objects come to a complete stop during the video that we can see?",
+                    # "question": "How many objects have stopped in the video?",
+                    "answer": str(len(transitions["stopped_objects"])),
+                },
+                # {
+                #     "question": "How many objects slow down and eventually stop during the video?",
+                #     # "question": "How many objects transition from moving to stationary states (i.e., decelerate to a stop) during the video?",
+                #     # "question": "How many objects changing state from moving towards stationary (deacelerating) state during the video?",
+                #     "answer": str(len(transitions['moving_to_stationary']))
+                # },
+                {
+                    # "question": "Based on the video, how many distinct objects exhibit rolling motion at any point during the scene?",
+                    "question": "How many objects display rolling motion at any point in the video?",
+                    # "question": "How many unique objects exhibit rotational motion characteristic of rolling at any point during the video observation?",
+                    "answer": str(len(transitions["rolling"])),
+                    # "answer": f"{len(transitions["rolling"])}"
+                },
+                # {
+                #     "question": "How many objects go from stationary to moving state in the video?",
+                #     "answer": str(len(transitions['stationary_to_moving']))
+                # }
+            ]
+        )
 
-        all_pairs = self._identify_collision_pairs(annotations) if has_collisions else []
-        collision_pairs = [
-            (a, b) for (a, b) in all_pairs
-            if a in props and b in props
-        ]
+        all_pairs = (
+            self._identify_collision_pairs(annotations) if has_collisions else []
+        )
+        collision_pairs = [(a, b) for (a, b) in all_pairs if a in props and b in props]
 
         # 2) Build the QAs
-        qas.extend([
-            {
-                # "question": "What is the total count of unique objects that participated in any collision event throughout the video?",
-                "question": "How many unique objects were involved in collision throughout the video?",
-                "answer": (
-                    str(self._count_collision_objects(annotations))
-                    if has_collisions else "No collisions detected"
-                )
-            },
-            # {
-            #     "question": "Which object was involved in the most collisions with other objects?",
-            #     # "question": "Which object was involved in the highest number of unique collisions with other different objects during the video?",
-            #     "answer": (
-            #         # get the most‐collided object ID, verify it’s in props, then describe
-            #         self._describe_obj(props[self._get_most_collided_object(annotations)])
-            #         if has_collisions and self._get_most_collided_object(annotations) in props
-            #         else "No collisions detected"
-            #     )
-            # },
-            # {
-            #     "question": "How many distinct collision events occurred between object pairs in the video?",
-            #     # "question": "What is the total number of separate collision events that occurred between different object pairs in the video?",
-            #     "answer": str(len(collision_pairs))
-            # }
-        ])
+        qas.extend(
+            [
+                {
+                    # "question": "What is the total count of unique objects that participated in any collision event throughout the video?",
+                    "question": "How many unique objects were involved in collision throughout the video?",
+                    "answer": (
+                        str(self._count_collision_objects(annotations))
+                        if has_collisions
+                        else "No collisions detected"
+                    ),
+                },
+                # {
+                #     "question": "Which object was involved in the most collisions with other objects?",
+                #     # "question": "Which object was involved in the highest number of unique collisions with other different objects during the video?",
+                #     "answer": (
+                #         # get the most‐collided object ID, verify it’s in props, then describe
+                #         self._describe_obj(props[self._get_most_collided_object(annotations)])
+                #         if has_collisions and self._get_most_collided_object(annotations) in props
+                #         else "No collisions detected"
+                #     )
+                # },
+                # {
+                #     "question": "How many distinct collision events occurred between object pairs in the video?",
+                #     # "question": "What is the total number of separate collision events that occurred between different object pairs in the video?",
+                #     "answer": str(len(collision_pairs))
+                # }
+            ]
+        )
 
         most_collided = self._get_most_collided_object(annotations)
         props = scene["physical_props"]
         if has_collisions and most_collided:
             # Get all visible objects for options
             all_visible_objects = list(props.keys())
-            options = [self._describe_obj(props[obj_id]) for obj_id in all_visible_objects]
+            options = [
+                self._describe_obj(props[obj_id]) for obj_id in all_visible_objects
+            ]
 
             # Get correct answers (only the most collided objects)
-            correct_answers = [self._describe_obj(props[obj_id]) for obj_id in most_collided]
+            correct_answers = [
+                self._describe_obj(props[obj_id]) for obj_id in most_collided
+            ]
 
             # Shuffle options but keep track of correct ones
             random.shuffle(options)
 
-            qas.append({
-                "question": "Which object was involved in the most collisions with other objects?",
-                "options": options,
-                "answer": correct_answers,
-                "multiple_answers": len(correct_answers) > 1
-            })
+            qas.append(
+                {
+                    "question": "Which object was involved in the most collisions with other objects?",
+                    "options": options,
+                    "answer": correct_answers,
+                    "multiple_answers": len(correct_answers) > 1,
+                }
+            )
         else:
-            qas.append({
-                "question": "Which object was involved in the most collisions with other objects?",
-                "answer": "No collisions detected"
-            })
+            qas.append(
+                {
+                    "question": "Which object was involved in the most collisions with other objects?",
+                    "answer": "No collisions detected",
+                }
+            )
 
         # collision_pairs = self._identify_collision_pairs(annotations) if has_collisions else []
         # qas.extend([
@@ -406,7 +452,9 @@ class PHOLPhysicsDataset(Dataset):
             collision_pairs = self._identify_collision_pairs(annotations)
             # print("collision_pairs ", collision_pairs)
 
-            kinomatic_qas = self._get_kinematic_loss(collision_pairs, props, annotations)
+            kinomatic_qas = self._get_kinematic_loss(
+                collision_pairs, props, annotations
+            )
             qas.extend(kinomatic_qas)
 
         stationary_re = self._stationary_re
@@ -427,11 +475,11 @@ class PHOLPhysicsDataset(Dataset):
                 round(true_seconds, 2),
                 round(max(true_seconds * 0.8, 0), 2),
                 round(true_seconds * 1.2, 2),
-                round(abs(true_seconds - 1.0), 2)
+                round(abs(true_seconds - 1.0), 2),
             }
 
             # If rounding collapsed any values, add new offsets until we have 4
-            delta = 0.25          # seconds
+            delta = 0.25  # seconds
             while len(cands) < 4:
                 cands.add(round(true_seconds + delta, 2))
                 delta += 0.25
@@ -447,37 +495,41 @@ class PHOLPhysicsDataset(Dataset):
             # ]
             # random.shuffle(opts)
 
-            qas.append({
-                "question": f"How many seconds did the {self._describe_obj(p)} spend stationary?",
-                "options": opts,
-                "answer": f"{true_seconds:.2f}s",
-                "explanation": (
-                    f"Count the number of video frames labelled ‘stationary’ for this object "
-                    f"(and divide by the frame-rate ({self.fps} fps)"
-                )
-            })
+            qas.append(
+                {
+                    "question": f"How many seconds did the {self._describe_obj(p)} spend stationary?",
+                    "options": opts,
+                    "answer": f"{true_seconds:.2f}s",
+                    "explanation": (
+                        f"Count the number of video frames labelled ‘stationary’ for this object "
+                        f"(and divide by the frame-rate ({self.fps} fps)"
+                    ),
+                }
+            )
 
             first_stat_frame = None
             for i, fr in enumerate(frames):
                 obj_state = fr.get("objects", {}).get(obj_id)
                 if not obj_state:
                     continue
-                if any(self._stationary_re.search(lbl)
-                       for tax in obj_state.get("taxonomy", [])
-                       for lbl in tax.get("labels", [])):
+                if any(
+                    self._stationary_re.search(lbl)
+                    for tax in obj_state.get("taxonomy", [])
+                    for lbl in tax.get("labels", [])
+                ):
                     first_stat_frame = i
                     break
 
             # print("first_stat_frame ", first_stat_frame)
             if first_stat_frame is not None:
-                start_time = round(first_stat_frame / self.fps, 2)   # seconds
+                start_time = round(first_stat_frame / self.fps, 2)  # seconds
 
                 # ---- build 4 unique options ----
                 cand_ts = {
                     round(start_time, 2),
-                    round(max(start_time - 0.4, 0), 2),     # a bit earlier
-                    round(start_time + 0.4, 2),             # a bit later
-                    round(abs(start_time - 1.0), 2)         # unrelated offset
+                    round(max(start_time - 0.4, 0), 2),  # a bit earlier
+                    round(start_time + 0.4, 2),  # a bit later
+                    round(abs(start_time - 1.0), 2),  # unrelated offset
                 }
                 # top-up if rounding caused duplicates
                 delta = 0.25
@@ -488,23 +540,26 @@ class PHOLPhysicsDataset(Dataset):
                 time_opts = [f"{v:.2f}s" for v in cand_ts]
                 random.shuffle(time_opts)
 
-                qas.append({
-                    "question": (
-                        f"At what time in the video does the {self._describe_obj(p)} "
-                        f"first become stationary?"),
-                    "options": time_opts,
-                    "answer": f"{start_time:.2f}s",
-                    "explanation": (
-                        "Scan frames in order until the first one labelled ‘stationary’ "
-                        f"is found .  Divide that frame number by the frame-rate ({self.fps} fps) "
-                    )
-                    # "explanation": (
-                    #     "Scan frames in order until the first one labelled ‘stationary’ "
-                    #     f"is found (frame {first_stat_frame}).  Divide that frame number "
-                    #     f"by the frame-rate ({self.fps} fps) → {first_stat_frame} ÷ "
-                    #     f"{self.fps} = {start_time:.2f} s."
-                    # )
-                })
+                qas.append(
+                    {
+                        "question": (
+                            f"At what time in the video does the {self._describe_obj(p)} "
+                            f"first become stationary?"
+                        ),
+                        "options": time_opts,
+                        "answer": f"{start_time:.2f}s",
+                        "explanation": (
+                            "Scan frames in order until the first one labelled ‘stationary’ "
+                            f"is found .  Divide that frame number by the frame-rate ({self.fps} fps) "
+                        ),
+                        # "explanation": (
+                        #     "Scan frames in order until the first one labelled ‘stationary’ "
+                        #     f"is found (frame {first_stat_frame}).  Divide that frame number "
+                        #     f"by the frame-rate ({self.fps} fps) → {first_stat_frame} ÷ "
+                        #     f"{self.fps} = {start_time:.2f} s."
+                        # )
+                    }
+                )
 
         options = []
         for obj_id, p in props.items():
@@ -515,13 +570,17 @@ class PHOLPhysicsDataset(Dataset):
             correct = self._describe_obj(props[max_fr_obj])
 
             options = [self._describe_obj(p) for p in props.values()]
-            qas.append({
-                "question": "Which object had the highest friction coefficient?",
-                "options": options,
-                "answer": correct
-            })
+            qas.append(
+                {
+                    "question": "Which object had the highest friction coefficient?",
+                    "options": options,
+                    "answer": correct,
+                }
+            )
         else:
-            print("Warning: No valid physical properties found. Skipping friction question.")
+            print(
+                "Warning: No valid physical properties found. Skipping friction question."
+            )
         # find max friction
         # max_fr_obj = max(props.items(), key=lambda kv: kv[1]["friction"][0])[0]
         # correct = self._describe_obj(props[max_fr_obj])
@@ -548,8 +607,9 @@ class PHOLPhysicsDataset(Dataset):
 
             # Find all frames where both objects exist
             valid_frames = [
-                (i, frame) for i, frame in enumerate(annotations['frames'])
-                if obj1_id in frame['objects'] and obj2_id in frame['objects']
+                (i, frame)
+                for i, frame in enumerate(annotations["frames"])
+                if obj1_id in frame["objects"] and obj2_id in frame["objects"]
             ]
 
             if not valid_frames:
@@ -559,54 +619,68 @@ class PHOLPhysicsDataset(Dataset):
             peak_frame_idx = 0
             max_delta_v = 0
             for i, frame in valid_frames:
-                v1 = frame['objects'][obj1_id].get('velocity', [0, 0, 0])
-                v2 = frame['objects'][obj2_id].get('velocity', [0, 0, 0])
-                delta_v = sum((v1[i]-v2[i])**2 for i in range(3))
+                v1 = frame["objects"][obj1_id].get("velocity", [0, 0, 0])
+                v2 = frame["objects"][obj2_id].get("velocity", [0, 0, 0])
+                delta_v = sum((v1[i] - v2[i]) ** 2 for i in range(3))
                 if delta_v > max_delta_v:
                     max_delta_v = delta_v
                     peak_frame_idx = i
 
             # Get frames before and after collision
             pre_frame_idx = max(0, peak_frame_idx - 1)
-            post_frame_idx = min(len(annotations['frames']) - 1, peak_frame_idx + 1)
+            post_frame_idx = min(len(annotations["frames"]) - 1, peak_frame_idx + 1)
 
             # Get pre and post frames - must check if objects exist in these frames
-            pre_frame = annotations['frames'][pre_frame_idx]
-            post_frame = annotations['frames'][post_frame_idx]
+            pre_frame = annotations["frames"][pre_frame_idx]
+            post_frame = annotations["frames"][post_frame_idx]
 
             # Skip if either object is missing in pre or post frame
-            if (obj1_id not in pre_frame['objects'] or obj2_id not in pre_frame['objects'] or
-                    obj1_id not in post_frame['objects'] or obj2_id not in post_frame['objects']):
+            if (
+                obj1_id not in pre_frame["objects"]
+                or obj2_id not in pre_frame["objects"]
+                or obj1_id not in post_frame["objects"]
+                or obj2_id not in post_frame["objects"]
+            ):
                 continue
 
             # Get velocities
-            v1_before = pre_frame['objects'][obj1_id].get('velocity', [0, 0, 0])
-            v2_before = pre_frame['objects'][obj2_id].get('velocity', [0, 0, 0])
-            v1_after = post_frame['objects'][obj1_id].get('velocity', [0, 0, 0])
-            v2_after = post_frame['objects'][obj2_id].get('velocity', [0, 0, 0])
+            v1_before = pre_frame["objects"][obj1_id].get("velocity", [0, 0, 0])
+            v2_before = pre_frame["objects"][obj2_id].get("velocity", [0, 0, 0])
+            v1_after = post_frame["objects"][obj1_id].get("velocity", [0, 0, 0])
+            v2_after = post_frame["objects"][obj2_id].get("velocity", [0, 0, 0])
 
-            m1, m2 = p1['mass'], p2['mass']
+            m1, m2 = p1["mass"], p2["mass"]
 
             def kinetic_energy(v, m):
                 return 0.5 * m * sum(vi**2 for vi in v)
 
             ke1_before = kinetic_energy(v1_before, m1)
             ke1_after = kinetic_energy(v1_after, m1)
-            percent_ke1_lost = max(0, 100 * (ke1_before - ke1_after) / ke1_before) if ke1_before > 0 else 0
+            percent_ke1_lost = (
+                max(0, 100 * (ke1_before - ke1_after) / ke1_before)
+                if ke1_before > 0
+                else 0
+            )
 
             ke2_before = kinetic_energy(v2_before, m2)
             ke2_after = kinetic_energy(v2_after, m2)
-            percent_ke2_lost = max(0, 100 * (ke2_before - ke2_after) / ke2_before) if ke2_before > 0 else 0
+            percent_ke2_lost = (
+                max(0, 100 * (ke2_before - ke2_after) / ke2_before)
+                if ke2_before > 0
+                else 0
+            )
 
             KE_before = ke1_before + ke2_before
             KE_after = ke1_after + ke2_after
-            percent_ke_lost = max(0, 100 * (KE_before - KE_after) / KE_before) if KE_before > 0 else 0
+            percent_ke_lost = (
+                max(0, 100 * (KE_before - KE_after) / KE_before) if KE_before > 0 else 0
+            )
 
             # collision_duration = (valid_frames[-1][0] - valid_frames[0][0] + 1) / self.fps  # Assuming 25fps
             contact_frames = []
-            for i, frame in enumerate(annotations['frames']):
-                for interaction in frame.get('interactions', []):
-                    mapped = {f"geom_obj{int(oid)-1}" for oid in interaction}
+            for i, frame in enumerate(annotations["frames"]):
+                for interaction in frame.get("interactions", []):
+                    mapped = {f"geom_obj{int(oid) - 1}" for oid in interaction}
                     if {obj1_id, obj2_id}.issubset(mapped):
                         contact_frames.append(i)
                         break
@@ -618,13 +692,23 @@ class PHOLPhysicsDataset(Dataset):
 
             def make_opts(true_val, is_percent=True):
                 a = round(true_val * 0.8, 1 if is_percent else 2)
-                b = round(min(true_val + (10 if is_percent else 0.2),
-                          100 if is_percent else true_val + 1), 1 if is_percent else 2)
-                c = round(abs(true_val - (50 if is_percent else 0.5)), 1 if is_percent else 2)
+                b = round(
+                    min(
+                        true_val + (10 if is_percent else 0.2),
+                        100 if is_percent else true_val + 1,
+                    ),
+                    1 if is_percent else 2,
+                )
+                c = round(
+                    abs(true_val - (50 if is_percent else 0.5)), 1 if is_percent else 2
+                )
                 opts = list({true_val, a, b, c})
                 random.shuffle(opts)
                 suffix = "%" if is_percent else "s"
-                return [f"{v:.1f}{suffix}" if is_percent else f"{v:.2f}{suffix}" for v in opts]
+                return [
+                    f"{v:.1f}{suffix}" if is_percent else f"{v:.2f}{suffix}"
+                    for v in opts
+                ]
 
             true_dur = round(collision_duration, 2)
 
@@ -635,12 +719,14 @@ class PHOLPhysicsDataset(Dataset):
             #     f"{true_dur * 1.2:.2f}s",
             #     f"{abs(true_dur - 0.5):.2f}s"
             # ]
-            opts_dur = list({
-                f"{true_dur:.2f}s",
-                f"{true_dur * 0.8:.2f}s",
-                f"{true_dur * 1.2:.2f}s",
-                f"{abs(true_dur - 0.5):.2f}s"
-            })
+            opts_dur = list(
+                {
+                    f"{true_dur:.2f}s",
+                    f"{true_dur * 0.8:.2f}s",
+                    f"{true_dur * 1.2:.2f}s",
+                    f"{abs(true_dur - 0.5):.2f}s",
+                }
+            )
             random.shuffle(opts_dur)
 
             true_val = round(percent_ke_lost, 1)
@@ -650,50 +736,58 @@ class PHOLPhysicsDataset(Dataset):
             #     f"{min(true_val + 10, 100):.1f}%", # e.g. 90% if true=80%
             #     f"{abs(true_val - 50):.1f}%"
             # ]
-            opts = list({
-                f"{true_val:.1f}%",
-                f"{max(true_val - 20, 0):.1f}%",
-                f"{min(true_val + 10, 100):.1f}%",
-                f"{abs(true_val - 50):.1f}%"
-            })
-            random.shuffle(opts)
-            questions.extend([
+            opts = list(
                 {
-                    # "question": f"What is total kinetic energy loss of the system when {desc1} collides with {desc2}?",
-                    "question": f"What percentage of the system’s kinetic energy was lost when the {desc1} collided with the {desc2}?",
-                    "answer": f"{true_val:.1f}%",
-                    "options":  make_opts(round(true_val, 1)),
-                    "explanation": ("For each object, kinetic energy KE = 0.5·m·|v|². "
-                                    "Compute KE_before and KE_after just before and just after impact, "
-                                    "then %loss = 100·(KE_before − KE_after)/KE_before. "
-                                    "Sum the two objects to get system % loss."),
-                    "details": {
-                        "system_loss": f"{percent_ke_lost:.1f}%",
-                        f"{obj1_id}_loss": f"{percent_ke1_lost:.1f}%",
-                        f"{obj2_id}_loss": f"{percent_ke2_lost:.1f}%"
-                    }
-                },
-                # {
-                #     "question": f"How much kinetic energy did {desc1} lose during the collision?",
-                #     "answer": f"{percent_ke1_lost:.1f}%"
-                # },
-                # {
-                #     "question": f"How much kinetic energy did {desc2} lose during the collision?",
-                #     "answer": f"{percent_ke2_lost:.1f}%"
-                # },
-                {
-                    "question": f"How long did the collision between {desc1} and {desc2} last (video fps is {self.fps})?",
-                    "options": make_opts(true_dur, is_percent=False),
-                    "answer": f"{true_dur:.2f}s",
-                    "explanation": ("Count consecutive frames where the interaction list "
-                                    "contains both objects, then divide by fps "
-                                    f"({self.fps}).")
+                    f"{true_val:.1f}%",
+                    f"{max(true_val - 20, 0):.1f}%",
+                    f"{min(true_val + 10, 100):.1f}%",
+                    f"{abs(true_val - 50):.1f}%",
                 }
-                # {
-                #     "question": f"How long did the collision between {desc1} and {desc2} last?",
-                #     "answer": f"{collision_duration:.2f} seconds"
-                # }
-            ])
+            )
+            random.shuffle(opts)
+            questions.extend(
+                [
+                    {
+                        # "question": f"What is total kinetic energy loss of the system when {desc1} collides with {desc2}?",
+                        "question": f"What percentage of the system’s kinetic energy was lost when the {desc1} collided with the {desc2}?",
+                        "answer": f"{true_val:.1f}%",
+                        "options": make_opts(round(true_val, 1)),
+                        "explanation": (
+                            "For each object, kinetic energy KE = 0.5·m·|v|². "
+                            "Compute KE_before and KE_after just before and just after impact, "
+                            "then %loss = 100·(KE_before − KE_after)/KE_before. "
+                            "Sum the two objects to get system % loss."
+                        ),
+                        "details": {
+                            "system_loss": f"{percent_ke_lost:.1f}%",
+                            f"{obj1_id}_loss": f"{percent_ke1_lost:.1f}%",
+                            f"{obj2_id}_loss": f"{percent_ke2_lost:.1f}%",
+                        },
+                    },
+                    # {
+                    #     "question": f"How much kinetic energy did {desc1} lose during the collision?",
+                    #     "answer": f"{percent_ke1_lost:.1f}%"
+                    # },
+                    # {
+                    #     "question": f"How much kinetic energy did {desc2} lose during the collision?",
+                    #     "answer": f"{percent_ke2_lost:.1f}%"
+                    # },
+                    {
+                        "question": f"How long did the collision between {desc1} and {desc2} last (video fps is {self.fps})?",
+                        "options": make_opts(true_dur, is_percent=False),
+                        "answer": f"{true_dur:.2f}s",
+                        "explanation": (
+                            "Count consecutive frames where the interaction list "
+                            "contains both objects, then divide by fps "
+                            f"({self.fps})."
+                        ),
+                    },
+                    # {
+                    #     "question": f"How long did the collision between {desc1} and {desc2} last?",
+                    #     "answer": f"{collision_duration:.2f} seconds"
+                    # }
+                ]
+            )
 
         return questions
 
@@ -702,17 +796,19 @@ class PHOLPhysicsDataset(Dataset):
             return "unknown color"
 
         rgb = tuple(rgba[:3])
-        min_dist = float('inf')
+        min_dist = float("inf")
         best_name = "unknown color"
 
         for name, hex_val in mcolors.CSS4_COLORS.items():
             named_rgb = mcolors.to_rgb(hex_val)
-            dist = sum((c1 - c2)**2 for c1, c2 in zip(rgb, named_rgb))
+            dist = sum((c1 - c2) ** 2 for c1, c2 in zip(rgb, named_rgb))
             if dist < min_dist:
                 min_dist = dist
                 best_name = name
 
-        return best_name.replace('grey', 'gray').replace('gray', 'grey')  # Standardize spelling
+        return best_name.replace("grey", "gray").replace(
+            "gray", "grey"
+        )  # Standardize spelling
 
     def is_visibly_valid(self, bbox):
         if bbox == [[0, 0], [0, 0]]:
@@ -725,7 +821,7 @@ class PHOLPhysicsDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Dict:
         sid = self.scenes[idx]
-        print('sid', sid)
+        print("sid", sid)
         scene_dir = os.path.join(self.root, sid)
         d = self._load_json(os.path.join(scene_dir, "obj.json"))
         frames = d.get("frames", [])
@@ -749,15 +845,21 @@ class PHOLPhysicsDataset(Dataset):
         }
 
         physical_props = self._get_physical_props(d.get("objects", []))
-        physical_props = {oid: physical_props[oid] for oid in valid_ids if oid in physical_props}
+        physical_props = {
+            oid: physical_props[oid] for oid in valid_ids if oid in physical_props
+        }
 
         has_collisions = self._compute_collision(frames)
         taxonomy = self._get_taxonomy(frames)
 
         vid = self.video_transform(
-            self._read_video(os.path.join(scene_dir, "simulation_objects.mp4")))
+            self._read_video(os.path.join(scene_dir, "simulation_objects.mp4"))
+        )
         seg = self.mask_transform(
-            self._read_video(os.path.join(scene_dir, "simulation_objects_segmentation.mp4")))
+            self._read_video(
+                os.path.join(scene_dir, "simulation_objects_segmentation.mp4")
+            )
+        )
 
         qa = None
         if self.include_qa:

@@ -2,7 +2,15 @@ import numpy as np
 
 
 class PhysicsEngine:
-    def __init__(self, precision=5, velocity_threshold=1e-6, acceleration_threshold=1e-6, epsilon=0.01, gravity=9.8, collision_elastic_factor=0.5):
+    def __init__(
+        self,
+        precision=5,
+        velocity_threshold=1e-6,
+        acceleration_threshold=1e-6,
+        epsilon=0.01,
+        gravity=9.8,
+        collision_elastic_factor=0.5,
+    ):
         self.precision = precision
         self.velocity_threshold = velocity_threshold
         self.acceleration_threshold = acceleration_threshold
@@ -25,7 +33,10 @@ class PhysicsEngine:
         # If current velocity is near threshold or both previous and current velocities are near zero
         if abs(vel_curr_mag - self.velocity_threshold) < self.velocity_threshold:
             return "Stationary"
-        if abs(vel_curr_mag) <= self.velocity_threshold and abs(vel_prev_mag) <= self.velocity_threshold:
+        if (
+            abs(vel_curr_mag) <= self.velocity_threshold
+            and abs(vel_prev_mag) <= self.velocity_threshold
+        ):
             return "Stationary"
         # If acceleration is negligible then it's constant velocity
         if accel_mag < self.acceleration_threshold:
@@ -51,19 +62,30 @@ class PhysicsEngine:
         linear_mag = np.linalg.norm(linear_velocity)
 
         # If both linear and angular velocities are very low, treat as no significant rotation
-        if linear_mag <= self.velocity_threshold and angular_mag <= self.velocity_threshold:
+        if (
+            linear_mag <= self.velocity_threshold
+            and angular_mag <= self.velocity_threshold
+        ):
             return None
-        if linear_mag <= self.velocity_threshold and angular_mag > self.velocity_threshold:
+        if (
+            linear_mag <= self.velocity_threshold
+            and angular_mag > self.velocity_threshold
+        ):
             return "Pure Rotation"
 
         rolling_diff = linear_mag - angular_mag * radius
         if abs(rolling_diff) < self.epsilon:
             return "Rolling Motion"
-        if linear_mag > self.velocity_threshold and angular_mag > self.velocity_threshold:
+        if (
+            linear_mag > self.velocity_threshold
+            and angular_mag > self.velocity_threshold
+        ):
             return "Rolling Motion with Slipping"
         return None
 
-    def detect_friction_event(self, velocity,  acceleration, friction_coefficient, drag_coefficient=None):
+    def detect_friction_event(
+        self, velocity, acceleration, friction_coefficient, drag_coefficient=None
+    ):
         """
         Detect friction-related events.
           - "Friction Stop": When the object’s velocity is negligible.
@@ -80,7 +102,10 @@ class PhysicsEngine:
         expected_friction_accel = -friction_coefficient * self.gravity
 
         # if vel_mag <= self.velocity_threshold:
-        if vel_mag <= self.velocity_threshold and accel_mag <= self.acceleration_threshold:
+        if (
+            vel_mag <= self.velocity_threshold
+            and accel_mag <= self.acceleration_threshold
+        ):
             return "Friction Stop"
 
         # ensure the object is actually moving
@@ -89,12 +114,14 @@ class PhysicsEngine:
             if np.dot(velocity, acceleration) < 0:
                 # Compute actual deceleration direction
                 deceleration_vector = -velocity / vel_mag * accel_mag
-                expected_deceleration_vector = -velocity / vel_mag * abs(expected_friction_accel)
+                expected_deceleration_vector = (
+                    -velocity / vel_mag * abs(expected_friction_accel)
+                )
 
                 # check if the actual deceleration is aligned with expected frictional force
                 alignment = np.dot(deceleration_vector, expected_deceleration_vector)
 
-                if alignment > 0.95:  # Threshold to ensure alignment
+                if alignment > 0.90:  # Threshold to ensure alignment
                     return "Sliding with Friction"
 
         return None
