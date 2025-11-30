@@ -43,11 +43,11 @@ def generate_dataset(
         video_file = sim_out["video_file"]
         file_path = sim_out["file_path"]
 
-        video_annotator.annotate(
-            file_path=file_path,
-            video_path=video_file,
-            annotated_video_path=os.path.join(scene_dir, "output_video.mp4"),
-        )
+        # video_annotator.annotate(
+        #     file_path=file_path,
+        #     video_path=video_file,
+        #     annotated_video_path=os.path.join(scene_dir, "output_video.mp4"),
+        # )
 
         qa_generator = QuestionAnswers(file_path)
         questions_answers = qa_generator.get_questions_answers()

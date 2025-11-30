@@ -78,7 +78,8 @@ class VideoAnnotationVisualizer:
                     # print("taxonomy_labels,", taxonomy_labels)
                     # print("velocity,", v, velocity)
                     # text = f"Mass: {mass:.2f} kg\nVelocity: {[round(v, 2) for v in velocity]}\nMaterial: {material}\nTaxonomy: {','.join(taxonomy_labels)}"
-                    text = f"Mass: {mass:.2f} kg\nVelocity: {v}\nAng Vel: {av}\nMaterial: {material}\nTaxonomy: {'\n'.join(taxonomy_labels)}"
+                    # text = f"Mass: {mass:.2f} kg\nVelocity: {v}\nAng Vel: {av}\nMaterial: {material}\nTaxonomy: {'\n'.join(taxonomy_labels)}"
+                    text = ''
                     y_offset = 20
 
                     for line in text.split("\n"):
