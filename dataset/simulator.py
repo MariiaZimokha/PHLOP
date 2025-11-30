@@ -31,7 +31,7 @@ class Simulation:
     <visual>
         <global offwidth="{self.width}" offheight="{self.height}" />
         <quality shadowsize="2048" />
-        
+
     </visual>"""
 
         self.world_body_start = """
@@ -149,6 +149,7 @@ class Simulation:
         """
         if objects is None:
             objects = self.__get_world_objects(num_objects)
+
         if camera is None:
             camera = {"mode": 0, "init": {}}
 
@@ -301,11 +302,17 @@ class Simulation:
             "objects": objects,
             "frames": annotation_frames,
         }
-        file_path = f"{path}obj.json"
+        file_path = f"{path}meta.json"
         save_file(file_path, data)
 
         return {
             "video_file": normal_video_filename,
             "segmentation_video_filename": segmentation_video_filename,
             "file_path": file_path,
+            "config": {
+                "objects": objects,
+                "floor": floor,
+                "lights": lights,
+                "camera_init": camera_init_config,
+            },
         }

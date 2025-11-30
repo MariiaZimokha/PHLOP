@@ -172,3 +172,4 @@ cython_debug/
 
 .venv
 generated/
+phlop_generation_buffer/
