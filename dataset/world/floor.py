@@ -13,7 +13,7 @@ class Floor:
         return {
             "friction": " ".join(map(str, friction)),
             "texture": random.choice(FLOOR_TEXTURE),
-            **self.get_visual_properties(friction)
+            **self.get_visual_properties(friction),
         }
 
     def get_friction(self):
@@ -39,5 +39,5 @@ class Floor:
         return {
             "rgba": rgba,
             "specular": f"{specular:.6f}",
-            "shininess": f"{shininess:.6f}"
+            "shininess": f"{shininess:.6f}",
         }

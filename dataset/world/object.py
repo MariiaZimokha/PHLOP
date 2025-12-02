@@ -49,10 +49,18 @@ class Object:
 
         elasticity_val = self.__sample_from_mixture(mixture_data["elasticity_dist"])
         density_val = self.__sample_from_mixture(mixture_data["density_dist"])
-        friction_static = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
-        friction_dynamic = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
-        friction_rolling = self.__sample_from_mixture(mixture_data["friction_dist_lateral"])
-        friction_str = f"{friction_static:.2f} {friction_dynamic:.2f} {friction_rolling:.2f}"
+        friction_static = self.__sample_from_mixture(
+            mixture_data["friction_dist_lateral"]
+        )
+        friction_dynamic = self.__sample_from_mixture(
+            mixture_data["friction_dist_lateral"]
+        )
+        friction_rolling = self.__sample_from_mixture(
+            mixture_data["friction_dist_lateral"]
+        )
+        friction_str = (
+            f"{friction_static:.2f} {friction_dynamic:.2f} {friction_rolling:.2f}"
+        )
 
         visual = self.__get_visual(material)
 
@@ -80,8 +88,11 @@ class Object:
         raw_mass = density_val * volume
         mass_val = max(raw_mass, 1e-6)
 
-        linear_velocity = np.random.uniform(-1, 1, size=3)
-        angular_velocity = np.random.uniform(-1, 1, size=3)
+        # linear_velocity = np.random.uniform(-1, 1, size=3)
+        # angular_velocity = np.random.uniform(-1, 1, size=3)
+        # Slow dynamic behavior
+        linear_velocity = 0.20 * np.random.uniform(-1, 1, size=3)
+        angular_velocity = 0.15 * np.random.uniform(-1, 1, size=3)
 
         return {
             "shape": shape,

@@ -10,14 +10,11 @@ from dataset.annotator import Annotator
 from dataset.video_annotation_visualizer import VideoAnnotationVisualizer
 from dataset.simulator import Simulation
 from dataset.utils import save_file
-from dataset.video_qa import add_qa_to_video
-from tqdm import tqdm
 
 
-def generate_dataset(output_dir: str,
-                     num_videos: int,
-                     duration: int = 15,
-                     seed: int = 0) -> None:
+def generate_dataset(
+    output_dir: str, num_videos: int, duration: int = 8, seed: int = 0, camera: int = 0
+) -> None:
     if seed:
         random.seed(seed)
 
@@ -34,14 +31,15 @@ def generate_dataset(output_dir: str,
 
         scene_dir = os.path.join(output_dir, f"{i}/")
         os.makedirs(scene_dir, exist_ok=True)
-        print('scene_dir ', scene_dir)
+        print("scene_dir ", scene_dir)
 
         sim_out = sim.run_simulation(
             num_objects=num_objects,
             duration=duration,  # seconds
             path=scene_dir,
+            camera={"mode": 0, "init": {}},
         )
-        print('sim_out,', sim_out)
+
         video_file = sim_out["video_file"]
         file_path = sim_out["file_path"]
 
@@ -77,18 +75,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--duration",
         type=int,
-        default=15,
-        help=(
-            "Video duration is seconds (default: 15)"
-        ),
+        default=8,
+        help=("Video duration is seconds (default: 15)"),
+    )
+    parser.add_argument(
+        "--camera_mode",
+        type=int,
+        default=0,
+        help=("Camera mode: 0 - fixed, 1 - dynamic (default: 0)"),
     )
     parser.add_argument(
         "--seed",
         type=int,
         default=0,
-        help=(
-            "Random seed for reproducibility (default: 0 means no fixed seed)."
-        ),
+        help=("Random seed for reproducibility (default: 0 means no fixed seed)."),
     )
     return parser.parse_args()
 
@@ -99,7 +99,9 @@ def main() -> None:
         args.output_dir,
         args.num_videos,
         args.duration,
-        args.seed)
+        args.seed,
+        args.camera_mode,
+    )
 
 
 if __name__ == "__main__":

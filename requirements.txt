@@ -9,3 +9,6 @@ imageio
 imageio[ffmpeg]
 pyopengl
 tqdm
+ruff
+pyarrow
+fastparquet
