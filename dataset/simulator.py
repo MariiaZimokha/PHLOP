@@ -22,8 +22,7 @@ class Simulation:
         self.light = Light()
         self.seg_color_map = {}
 
-        # XML template for the MuJoCo simulation
-        # <option timestep="0.0005" gravity="0 0 -9.81"/>
+        # XML template
         self.header = f"""
 <mujoco model="dynamic_objects">
     <size nconmax="200" njmax="200"/>
@@ -31,12 +30,9 @@ class Simulation:
     <visual>
         <global offwidth="{self.width}" offheight="{self.height}" />
         <quality shadowsize="2048" />
-
     </visual>"""
 
-        self.world_body_start = """
-        <worldbody>
-        """
+        self.world_body_start = """<worldbody>"""
 
         self.world_floor = """
             <geom name="floor" type="plane" 
@@ -47,7 +43,8 @@ class Simulation:
               group="0"
               material="floor_mat"/>
         """
-        # <camera name="camera" pos="0 -.1 .07" xyaxes="1 0 0 0 1 2"/>
+
+        # Initial static camera definition
         self.world_body_end = """
         <camera name="camera" pos="-.1 -.1 0.1" xyaxes="0.78 -0.63 0 0.27 0.33 0.9"/>
     </worldbody>
@@ -70,11 +67,9 @@ class Simulation:
                     else np.random.randint(0, 255, size=3).tolist()  # random color
                 )
             mask[seg_ids == geom_id] = self.seg_color_map[geom_id]
-
         return mask
 
     def __get_world_objects(self, num_objects=3):
-        """Generate a list of objects with random properties."""
         objects = []
         for _ in range(num_objects):
             obj = self.obj.get_object()
@@ -126,7 +121,7 @@ class Simulation:
         for i in range(data.ncon):
             c = data.contact[i]
             g1, g2 = c.geom1, c.geom2
-            if g1 != 0 and g2 != 0:  # skip floor collisions
+            if g1 != 0 and g2 != 0:
                 colliding_pairs.add(tuple(sorted((g1, g2))))
         return colliding_pairs
 
@@ -149,13 +144,10 @@ class Simulation:
         """
         if objects is None:
             objects = self.__get_world_objects(num_objects)
-
         if camera is None:
             camera = {"mode": 0, "init": {}}
-
         if floor is None:
             floor = self.floor.get_settings()
-
         if lights is None:
             lights = self.light.get_settings(2)
 
@@ -163,31 +155,47 @@ class Simulation:
             floor_rgba=floor["rgba"], floor_friction=floor["friction"]
         )
 
-        num_objects = len(objects)
         asset_defs, bodies_xml, light_xml = self.__build_assets_and_bodies(
             objects, floor, lights
         )
 
         simulation_xml = (
-            f"{self.header}"
-            f"<asset>{asset_defs}</asset>"
-            f"{self.world_body_start}"
-            f"{light_xml}"
-            f"{world_floor}"
-            f"{bodies_xml}"
-            f"{self.world_body_end}"
+            f"{self.header}<asset>{asset_defs}</asset>"
+            f"{self.world_body_start}{light_xml}{world_floor}"
+            f"{bodies_xml}{self.world_body_end}"
         )
 
-        # Initialize MuJoCo model and data
+        # Initialize MuJoCo
         model = mujoco.MjModel.from_xml_string(simulation_xml)
         data = mujoco.MjData(model)
 
         # Configure camera
         self.camera_settings.set_model(model, data)
-        self.camera_settings.set_init_settings(camera.get("init", {}))
-        camera_init_config = self.camera_settings.get_init_settings()
+        self.camera_settings.set_init_settings(camera.get("init", None))
 
-        # Initialize object velocities and IDs
+        # Setup limits if they exist, otherwise sensible defaults
+        init_cam = camera.get("init", {})
+        az = init_cam.get("azimuth", self.camera_settings.camera.azimuth)
+        el = init_cam.get("elevation", self.camera_settings.camera.elevation)
+        dist = init_cam.get("distance", self.camera_settings.camera.distance)
+
+        # Limits: keep camera from flipping or hitting floor
+        # Elevation: -80 (top down) to -5 (near horizon)
+        # Distance: 1.5m to 8.0m
+        az_range = tuple(camera.get("limits", {}).get("az_range", (-180, 180)))
+        el_range = tuple(camera.get("limits", {}).get("el_range", (-50, -20)))
+        dist_range = tuple(camera.get("limits", {}).get("dist_range", (0.8, 1.6)))
+
+        self.camera_settings.set_limits(
+            az_range=az_range, el_range=el_range, dist_range=dist_range
+        )
+
+        if camera.get("mode", 0) == 1:
+            self.camera_settings.follow_object = "orbit"
+        else:
+            self.camera_settings.follow_object = "none"
+
+        # Initialize Velocities
         for i, obj in enumerate(objects):
             joint_id = mujoco.mj_name2id(
                 model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free"
@@ -200,58 +208,63 @@ class Simulation:
             objects[i]["id"] = f"geom_obj{i}"
 
         physics = PhysicsTaxonomy(objects)
-        prev_frame_data = {
-            obj["id"]: {
-                "velocity": [float(x) for x in obj["velocity"]],
-                "angular_velocity": [float(x) for x in obj["angular_velocity"]],
-                "position": [
-                    obj["init_possition_x"],
-                    obj["init_possition_y"],
-                    obj["base_z"],
-                ],
-            }
-            for obj in objects
-        }
-
-        print('camera["mode"] ', camera["mode"])
+        prev_frame_data = self._get_obj_data(model, data, objects)
 
         normal_frames = []
         segmentation_frames = []
         annotation_frames = []
         prev_time = data.time
 
+        # Prepare for rendering
+        cam_mode = camera.get("mode", 0)
+        is_moving_cam = cam_mode == 1
+
         with mujoco.Renderer(model, self.height, self.width) as renderer:
             renderer.enable_segmentation_rendering()
+
             while data.time < duration:
                 mujoco.mj_step(model, data)
+                if is_moving_cam:
+                    self.camera_settings.update_camera(
+                        len(objects),
+                        renderer,
+                        dt=model.opt.timestep,
+                        orbit_speed=0.5,
+                        dynamic=True,
+                    )
 
+                # --- RENDER LOGIC (at framerate) ---
                 if len(normal_frames) < data.time * framerate:
-                    if camera["mode"] == 1:
-                        self.camera_settings.update_camera(num_objects, renderer)
-                    else:
-                        # static — just update scene normally
-                        renderer.update_scene(data, camera=self.camera_settings.camera)
+                    # 1. Decide which camera to use for rendering
+                    # If moving, use the dynamic object. If static, use the ID (or the object, doesn't matter if static)
+                    # CRITICAL FIX: Use self.camera_settings.camera (the object), NOT cam_id (the int)
+                    render_cam = self.camera_settings.camera
+
+                    # 2. Render RGB
                     renderer.disable_segmentation_rendering()
+                    renderer.update_scene(data, camera=render_cam)  # <--- FIX HERE
                     normal_frames.append(renderer.render())
 
-                    # Render segmentation frame
+                    # 3. Render Segmentation
                     renderer.enable_segmentation_rendering()
+                    renderer.update_scene(data, camera=render_cam)  # <--- FIX HERE
                     seg_frame = renderer.render()
                     segmentation_frames.append(
                         self.__convert_segmentation_to_mask(seg_frame)
                     )
 
-                    # Generate annotations
+                    # 4. Annotations & Physics
                     annotation = self.annotator.get_annotation(
                         seg_frame, objects, data, model
                     )
                     pairs = self.__detect_collisions(model, data)
+
                     current_time = data.time
-                    dt = current_time - prev_time
-                    # df = 1.0 / framerate
+                    dt_step = current_time - prev_time
                     prev_time = current_time
+
                     events = physics.get_taxonomy(
-                        model, data, dt, prev_frame_data, annotation["objects"]
+                        model, data, dt_step, prev_frame_data, annotation["objects"]
                     )
 
                     annotation_all = {
@@ -274,22 +287,9 @@ class Simulation:
                     )
 
                     # Update previous frame data
-                    for i, obj in enumerate(objects):
-                        obj_id = obj["id"]
-                        joint_id = mujoco.mj_name2id(
-                            model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free"
-                        )
-                        adr = model.jnt_dofadr[joint_id]
-                        prev_frame_data[obj_id] = {
-                            "velocity": [
-                                float(x) for x in data.qvel[adr : adr + 3].tolist()
-                            ],
-                            "angular_velocity": [
-                                float(x) for x in data.qvel[adr + 3 : adr + 6].tolist()
-                            ],
-                            "position": data.qpos[adr : adr + 3].tolist(),
-                        }
+                    prev_frame_data = self._get_obj_data(model, data, objects)
 
+        # Save outputs
         normal_video_filename = f"{path}simulation_objects.mp4"
         segmentation_video_filename = f"{path}simulation_objects_segmentation.mp4"
         imageio.mimsave(
@@ -297,13 +297,17 @@ class Simulation:
         )
         imageio.mimsave(segmentation_video_filename, segmentation_frames, fps=framerate)
 
-        data = {
-            "world": {"floor": floor, "camera": camera_init_config, "lights": lights},
+        data_export = {
+            "world": {
+                "floor": floor,
+                "camera": self.camera_settings.get_init_settings(),
+                "lights": lights,
+            },
             "objects": objects,
             "frames": annotation_frames,
         }
         file_path = f"{path}meta.json"
-        save_file(file_path, data)
+        save_file(file_path, data_export)
 
         return {
             "video_file": normal_video_filename,
@@ -313,6 +317,24 @@ class Simulation:
                 "objects": objects,
                 "floor": floor,
                 "lights": lights,
-                "camera_init": camera_init_config,
+                "camera_init": self.camera_settings.get_init_settings(),
             },
         }
+
+    def _get_obj_data(self, model, data, objects):
+        """Helper to extract object state."""
+        out = {}
+        for i, obj in enumerate(objects):
+            obj_id = obj["id"]
+            joint_id = mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free"
+            )
+            adr = model.jnt_dofadr[joint_id]
+            out[obj_id] = {
+                "velocity": [float(x) for x in data.qvel[adr : adr + 3].tolist()],
+                "angular_velocity": [
+                    float(x) for x in data.qvel[adr + 3 : adr + 6].tolist()
+                ],
+                "position": data.qpos[adr : adr + 3].tolist(),
+            }
+        return out

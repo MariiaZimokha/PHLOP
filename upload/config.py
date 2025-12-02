@@ -18,17 +18,22 @@ HEIGHT = 384
 FPS = 25
 
 # --- CAMERA CONSTANTS ---
-# Training: Standard frontal views
-TRAIN_CAM_AZIMUTH = (-30.0, 30.0)
-TRAIN_CAM_ELEVATION = (-30.0, -10.0)
-TRAIN_CAM_DISTANCE = (2.0, 3.0)
+# --- CAMERA CONSTANTS ---
 
-# Validation: Slightly shifted, lower angles
-VAL_CAM_AZIMUTH = (35.0, 45.0)
-VAL_CAM_ELEVATION = (-10.0, 0.0)
-VAL_CAM_DISTANCE = (2.0, 3.5)
+# Training: Close, intimate views, standard angles
+# Distance reduced to 1.8m - 3.5m (Objects fill the screen)
+TRAIN_CAM_AZIMUTH = (-60.0, 60.0)
+TRAIN_CAM_ELEVATION = (-40.0, -10.0)  # Look DOWN at objects
+TRAIN_CAM_DISTANCE = (1.8, 3.5)  # MUCH CLOSER
 
-# Test: Extreme angles (OOD generalization)
-TEST_CAM_AZIMUTH = (45.0, 75.0)
-TEST_CAM_ELEVATION = (5.0, 20.0)
-TEST_CAM_DISTANCE = (2.5, 4.0)
+# Validation: Side views, slightly zoomed out
+# Distance: 3.0m - 4.5m
+VAL_CAM_AZIMUTH = (70.0, 110.0)
+VAL_CAM_ELEVATION = (-50.0, -20.0)
+VAL_CAM_DISTANCE = (3.0, 4.5)
+
+# Test: Back views, Extreme Closeups OR Extreme Far
+# Distance: 1.5m (Macro) to 5.5m (Far)
+TEST_CAM_AZIMUTH = (130.0, 170.0)
+TEST_CAM_ELEVATION = (-60.0, -5.0)
+TEST_CAM_DISTANCE = (1.5, 5.5)

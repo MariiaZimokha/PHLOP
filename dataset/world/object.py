@@ -88,8 +88,11 @@ class Object:
         raw_mass = density_val * volume
         mass_val = max(raw_mass, 1e-6)
 
-        linear_velocity = np.random.uniform(-1, 1, size=3)
-        angular_velocity = np.random.uniform(-1, 1, size=3)
+        # linear_velocity = np.random.uniform(-1, 1, size=3)
+        # angular_velocity = np.random.uniform(-1, 1, size=3)
+        # Slow dynamic behavior
+        linear_velocity = 0.20 * np.random.uniform(-1, 1, size=3)
+        angular_velocity = 0.15 * np.random.uniform(-1, 1, size=3)
 
         return {
             "shape": shape,

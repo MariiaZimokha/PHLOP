@@ -1,6 +1,7 @@
-import os
 import json
+import os
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from huggingface_hub import HfApi
 
@@ -13,6 +14,7 @@ from dataset.question_answer import QuestionAnswers
 import random
 
 from upload.config import (
+    HF_REPO,
     HF_TOKEN,
     VAL_COUNT,
     TEST_COUNT,
@@ -23,68 +25,207 @@ from upload.config import (
     FPS,
 )
 
-from upload.config import (
-    TRAIN_CAM_AZIMUTH,
-    TRAIN_CAM_ELEVATION,
-    TRAIN_CAM_DISTANCE,
-    VAL_CAM_AZIMUTH,
-    VAL_CAM_ELEVATION,
-    VAL_CAM_DISTANCE,
-    TEST_CAM_AZIMUTH,
-    TEST_CAM_ELEVATION,
-    TEST_CAM_DISTANCE,
-)
 
-
-def upload_file_to_hf(local_path: str, hf_path: str, shard_id: int, split: str):
+def upload_file_to_hf(local_path: str, repo_id: str, path_in_repo: str):
     api = HfApi(token=HF_TOKEN)
 
-    print(f"⬆️ Uploading Shard {shard_id} content...")
-
-    # # Upload Parquet (Metadata)
-    # api.upload_file(
-    #     path_or_fileobj=parquet_path,
-    #     path_in_repo=f"data/{split}/shard_{shard_id:04d}.parquet",
-    #     repo_id=HF_REPO,
-    #     repo_type="dataset"
-    # )
-
-    # # Upload Videos (Files)
-    # for row in shard_data:
-    #     api.upload_file(
-    #         path_or_fileobj=row["local_video_path"],
-    #         path_in_repo=row["video_file"],  # matches the 'video_file' column in parquet
-    #         repo_id=HF_REPO,
-    #         repo_type="dataset"
-    #     )
-
-    # # 5. Cleanup
-    # print(f"🧹 Cleaning up Shard {shard_id}")
-    # shutil.rmtree(OUTPUT_DIR)  # Wipes the buffer
+    try:
+        api.upload_file(
+            path_or_fileobj=local_path,
+            path_in_repo=path_in_repo,
+            repo_id=repo_id,
+            repo_type="dataset",
+        )
+        print(f"✅ Uploaded: {path_in_repo}")
+    except Exception as e:
+        print(f"❌ Failed to upload {path_in_repo}: {e}")
 
 
-def sample_camera(split: str, mode: str = "static"):
+def upload_shard_to_hf(
+    shard_id: int, shard_dir: Path, repo_id: str, split: str, parquet_filename: str
+):
+    api = HfApi(token=HF_TOKEN)
+
+    print(f"\n⬆️  Uploading {split} Shard {shard_id}...")
+
+    parquet_path = shard_dir / parquet_filename
+    if not parquet_path.exists():
+        print(f"❌ Parquet file not found: {parquet_path}")
+        return False
+
+    df = pd.read_parquet(parquet_path)
+    try:
+        api.upload_file(
+            path_or_fileobj=str(parquet_path),
+            path_in_repo=f"data/{split}/shard_{shard_id:04d}.parquet",
+            repo_id=repo_id,
+            repo_type="dataset",
+        )
+        print(f"  ✅ Uploaded parquet: data/{split}/shard_{shard_id:04d}.parquet")
+    except Exception as e:
+        print(f"  ❌ Failed to upload parquet: {e}")
+        return False
+
+    video_cols = [col for col in df.columns if "video" in col or "annotated" in col]
+    metadata_cols = [col for col in df.columns if "metadata" in col or "qa" in col]
+
+    total_files = len(df) * (len(video_cols) + len(metadata_cols))
+    uploaded_count = 0
+
+    for idx, row in df.iterrows():
+        # Upload videos
+        for col in video_cols:
+            local_file = row[col]
+            if pd.notna(local_file) and os.path.exists(local_file):
+                filename = Path(local_file).name
+                repo_path = f"data/{split}/shard_{shard_id:04d}/{idx:04d}/{filename}"
+
+                try:
+                    api.upload_file(
+                        path_or_fileobj=local_file,
+                        path_in_repo=repo_path,
+                        repo_id=repo_id,
+                        repo_type="dataset",
+                    )
+                    uploaded_count += 1
+                    print(f"  ✅ [{uploaded_count}/{total_files}] {repo_path}")
+                except Exception as e:
+                    print(f"  ⚠️  Skipped {filename}: {str(e)[:50]}")
+
+        # Upload metadata files
+        for col in metadata_cols:
+            local_file = row[col]
+            if pd.notna(local_file) and os.path.exists(local_file):
+                filename = Path(local_file).name
+                repo_path = f"data/{split}/shard_{shard_id:04d}/{idx:04d}/{filename}"
+
+                try:
+                    api.upload_file(
+                        path_or_fileobj=local_file,
+                        path_in_repo=repo_path,
+                        repo_id=repo_id,
+                        repo_type="dataset",
+                    )
+                    uploaded_count += 1
+                    print(f"  ✅ [{uploaded_count}/{total_files}] {repo_path}")
+                except Exception as e:
+                    print(f"  ⚠️  Skipped {filename}: {str(e)[:50]}")
+
+    print(
+        f"  ✅ Shard {shard_id} upload complete ({uploaded_count}/{total_files} files)"
+    )
+    return True
+
+
+
+
+def calculate_adaptive_distance(elevation_angle, angle_range, distance_range):
     """
-    Returns camera config dict based on the dataset split.
+    Calculate distance based on elevation angle.
+    Steeper angles (more negative) = closer distance.
+    Shallow angles (less negative) = farther distance.
+
+    Args:
+        elevation_angle: Camera elevation in degrees (-90 to 0, where -90 is top-down)
+        angle_range: Tuple (min_elev, max_elev) used in this split
+        distance_range: Tuple (min_dist, max_dist) for this split
+
+    Returns:
+        Adaptive distance as float
+
+    Example:
+        elev = -60  # Steep downward
+        dist = calculate_adaptive_distance(elev, (-80, -10), (1.5, 4.5))
+        # Returns close distance because steep angle
+
+        elev = -15  # Shallow angle
+        dist = calculate_adaptive_distance(elev, (-80, -10), (1.5, 4.5))
+        # Returns far distance because shallow angle
     """
+    min_elev, max_elev = angle_range
+    min_dist, max_dist = distance_range
+
+    # Normalize elevation to [0, 1] where:
+    # 0 = most top-down (min_elev, e.g., -80)
+    # 1 = shallowest (max_elev, e.g., -10)
+    normalized = (elevation_angle - min_elev) / (max_elev - min_elev)
+    normalized = np.clip(normalized, 0.0, 1.0)
+
+    # INVERSE relationship: steeper (lower normalized) = closer (lower distance)
+    # normalized=0 (top-down) → min_dist
+    # normalized=1 (shallow)  → max_dist
+    adaptive_dist = min_dist + normalized * (max_dist - min_dist)
+
+    return float(adaptive_dist)
+
+
+def sample_camera_for_split(split: str, mode: str = "static"):
+    """
+    Returns split-specific camera config with ADAPTIVE distance based on elevation.
+
+    The distance automatically adjusts based on the elevation angle:
+    - Steep angles (top-down): Camera moves closer for better framing
+    - Shallow angles (near horizon): Camera moves back for wider view
+
+    TRAIN:
+        - Broad azimuth (-180 to 180)
+        - Moderate elevation (-45 to -15)
+        - Adaptive distance (1.5 to 3.0m)
+
+    VAL:
+        - Narrower azimuth (-90 to 90) - test angle robustness
+        - Steeper elevation (-60 to -35) - more top-down views
+        - Adaptive distance (2.5 to 4.0m) - pulled back slightly
+
+    TEST:
+        - Full azimuth (-180 to 180) - test all rotations
+        - Extreme elevation (-80 to -10) - test extreme angles
+        - Adaptive distance (1.5 to 4.5m) - wide range, but adaptive prevents "too far"
+    """
+
     if split == "train":
-        az = random.uniform(*TRAIN_CAM_AZIMUTH)
-        elev = random.uniform(*TRAIN_CAM_ELEVATION)
-        dist = random.uniform(*TRAIN_CAM_DISTANCE)
+        az = random.uniform(-180, 180)
+        elev = random.uniform(-45, -15)
+        angle_range = (-45, -15)
+        distance_range = (1.0, 2.5)
+        lookat_z = random.uniform(0.3, 0.7)
+
     elif split == "val":
-        az = random.uniform(*VAL_CAM_AZIMUTH)
-        elev = random.uniform(*VAL_CAM_ELEVATION)
-        dist = random.uniform(*VAL_CAM_DISTANCE)
+        az = random.uniform(-90, 90)
+        elev = random.uniform(-60, -35)
+        angle_range = (-60, -35)
+        # distance_range = (.5, 3.0)
+        distance_range = (1.0, 2.5)
+        lookat_z = random.uniform(0.4, 0.6)
+
     else:  # test
-        az = random.uniform(*TEST_CAM_AZIMUTH)
-        elev = random.uniform(*TEST_CAM_ELEVATION)
-        dist = random.uniform(*TEST_CAM_DISTANCE)
+        az = random.uniform(-180, 180)
+        elev = random.uniform(-80, -10)
+        angle_range = (-80, -10)
+        # distance_range = (1.5, 3.0)
+        distance_range = (1.0, 2.5)
+        lookat_z = random.uniform(0.2, 0.9)
+
+    dist = calculate_adaptive_distance(elev, angle_range, distance_range)
+
+    lookat = [random.uniform(-0.5, 0.5), random.uniform(-0.5, 0.5), lookat_z]
 
     cam_mode_int = 1 if mode == "moving" else 0
 
     return {
         "mode": cam_mode_int,
-        "init": {"azimuth": az, "elevation": elev, "distance": dist},
+        "init": {
+            "lookat": lookat,
+            "azimuth": az,
+            "elevation": elev,
+            "distance": dist,
+        },
+        "limits": {
+            "az_range": (-180, 180),
+            "el_range": (-89, 0),
+            "dist_range": (0.8, 10.0),
+        },
+        "follow": "none" if mode == "static" else "fastest",
     }
 
 
@@ -139,6 +280,8 @@ def run_single_simulation(
 
 
 def generate_training_shard(shard_id, start_idx, count):
+    # def generate_training_shard(shard_id, start_idx, count, upload_to_hf=False, hf_repo_id=None):
+
     obj = Object()
     annotator = Annotator()
     sim = Simulation(obj, annotator=annotator, width=WIDTH, height=HEIGHT)
@@ -155,7 +298,9 @@ def generate_training_shard(shard_id, start_idx, count):
 
         scene_path = OUTPUT_DIR / f"train_{global_idx}"
         num_objects = random.randint(2, 6)
-        camera_cfg = sample_camera("train", cam_mode)
+        # camera_cfg = sample_camera("train", cam_mode)
+        camera_cfg = sample_camera_for_split(split="train", mode=cam_mode)
+        # print("camera_cfg", camera_cfg)
 
         out = run_single_simulation(
             sim=sim,
@@ -165,7 +310,7 @@ def generate_training_shard(shard_id, start_idx, count):
             scene_dir=scene_path,
             camera_cfg=camera_cfg,
         )
-        print("out ", out)
+        # print("out ", out)
         rows.append(
             {
                 "id": global_idx,
@@ -180,8 +325,24 @@ def generate_training_shard(shard_id, start_idx, count):
             }
         )
 
+    # df = pd.DataFrame(rows)
+    # df.to_parquet(OUTPUT_DIR / f"train_shard_{shard_id:04d}.parquet", index=False)
     df = pd.DataFrame(rows)
-    df.to_parquet(OUTPUT_DIR / f"train_shard_{shard_id:04d}.parquet", index=False)
+    parquet_filename = f"train_shard_{shard_id:04d}.parquet"
+    parquet_path = OUTPUT_DIR / parquet_filename
+    df.to_parquet(parquet_path, index=False)
+
+    print(f"✅ Saved parquet: {parquet_filename}")
+
+    # Upload to HuggingFace if requested
+    # if upload_to_hf and hf_repo_id:
+    upload_shard_to_hf(
+        shard_id=shard_id,
+        shard_dir=OUTPUT_DIR,
+        repo_id=HF_REPO,
+        split="train",
+        parquet_filename=parquet_filename,
+    )
 
 
 def generate_validation_shard(shard_id, start_idx, count, split):
@@ -196,8 +357,10 @@ def generate_validation_shard(shard_id, start_idx, count, split):
         base_scene_path.mkdir(parents=True, exist_ok=True)
 
         num_objects = random.randint(2, 6)
-        camera_cfg = sample_camera(split, "static")
-        print('camera_cfg ',camera_cfg)
+        # camera_cfg = sample_camera(split, "static")
+        camera_cfg = sample_camera_for_split(split=split, mode="static")
+
+        print("camera_cfg ", camera_cfg)
 
         out_static = run_single_simulation(
             sim=sim,
@@ -219,12 +382,12 @@ def generate_validation_shard(shard_id, start_idx, count, split):
 
         # static_video_path = scene_path / "simulation_objects_static.mp4"
         # os.rename(out_static["video"], static_video_path)
-        print('====================')
-        print('camera_cfg ',camera_cfg)
+        # print("====================")
+        # print("camera_cfg ", camera_cfg)
 
-        print(out_static["qa"])
-        print('====================')
-        print(out_static["qa_pairs"])
+        # print(out_static["qa"])
+        # print("====================")
+        # print(out_static["qa_pairs"])
         out_moving = run_single_simulation(
             sim=sim,
             num_objects=num_objects,
@@ -233,7 +396,7 @@ def generate_validation_shard(shard_id, start_idx, count, split):
             scene_dir=base_scene_path / "moving",
             camera_cfg=camera_cfg,
             objects=objects,
-            floor=floor, 
+            floor=floor,
             lights=lights,
         )
 
@@ -286,12 +449,13 @@ def main():
     # TRAIN_COUNT, VAL_COUNT, TEST_COUNT
 
     if split == "train":
-        while current_idx < 10:
+        while current_idx < 50:
             # while current_idx < TRAIN_COUNT:
             # process_shard(shard_id, current_idx, SHARD_SIZE, split=split)
             generate_training_shard(shard_id, current_idx, SHARD_SIZE)
             current_idx += SHARD_SIZE
             shard_id += 1
+
     if split in ["val", "test"]:
         total_count = VAL_COUNT if split == "val" else TEST_COUNT
         while current_idx < 10:
