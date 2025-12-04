@@ -45,8 +45,8 @@ def set_position_and_velocity(obj):
             -speed * np.sin(angle),
             random.uniform(-0.1, 0.1),
         ]
-    obj["init_possition_x"] = x
-    obj["init_possition_y"] = y
+    obj["init_position_x"] = x
+    obj["init_position_y"] = y
     obj["collision_radius"] = collision_radius
     return obj
 
@@ -95,8 +95,19 @@ def set_physics_properties(obj):
 
 def save_file(path, data):
     def convert(obj):
+        """Custom converter for JSON serialization of numpy types."""
         if isinstance(obj, set):
-            return list(obj)  # Convert set to list
+            return list(obj)
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.generic):
+            return obj.item()
         raise TypeError(f"Type {type(obj)} not serializable")
 
     with open(path, "w") as f:

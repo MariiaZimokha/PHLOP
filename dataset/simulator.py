@@ -22,6 +22,10 @@ class Simulation:
         self.light = Light()
         self.seg_color_map = {}
 
+        # Bidirectional mapping for object tracking
+        self.geom_id_to_obj_id = {}  # geom_id (int) → obj["id"] (str)
+        self.obj_id_to_geom_id = {}  # obj["id"] (str) → geom_id (int)
+
         # XML template
         self.header = f"""
 <mujoco model="dynamic_objects">
@@ -54,8 +58,7 @@ class Simulation:
         return random.choices(self.modes, weights=weights, k=1)[0]
 
     def __convert_segmentation_to_mask(self, seg_frame):
-        """Convert segmentation IDs to a colored mask."""
-        seg_ids = seg_frame[:, :, 0]  # Red channel contains segmentation IDs
+        seg_ids = seg_frame[:, :, 0]
         mask = np.zeros((seg_frame.shape[0], seg_frame.shape[1], 3), dtype=np.uint8)
         unique_ids = np.unique(seg_ids)
 
@@ -63,8 +66,8 @@ class Simulation:
             if geom_id not in self.seg_color_map:
                 self.seg_color_map[geom_id] = (
                     [0, 0, 0]
-                    if geom_id == 0  # floor
-                    else np.random.randint(0, 255, size=3).tolist()  # random color
+                    if geom_id == 0
+                    else np.random.randint(0, 255, size=3).tolist()
                 )
             mask[seg_ids == geom_id] = self.seg_color_map[geom_id]
         return mask
@@ -91,7 +94,7 @@ class Simulation:
             )
             bodies_xml.append(
                 f"""
-                <body name="obj{i}" pos="{obj["init_possition_x"]:.4f} {obj["init_possition_y"]:.4f} {obj["base_z"]:.4f}">
+                <body name="obj{i}" pos="{obj["init_position_x"]:.4f} {obj["init_position_y"]:.4f} {obj["base_z"]:.4f}">
                     <freejoint name="obj{i}_free"/>
                     <geom name="geom_obj{i}" type="{obj["geom_type"]}" size="{obj["size_str"]}" mass="{obj["mass"]}"
                           friction="{obj["friction"]}" material="{mat_name}" group="1"/>
@@ -136,12 +139,6 @@ class Simulation:
         floor=None,
         lights=None,
     ):
-        """
-        camera:
-            mode:
-                0 - static
-                1 - dynamic
-        """
         if objects is None:
             objects = self.__get_world_objects(num_objects)
         if camera is None:
@@ -169,7 +166,7 @@ class Simulation:
         model = mujoco.MjModel.from_xml_string(simulation_xml)
         data = mujoco.MjData(model)
 
-        # Configure camera
+        # --- CAMERA SETUP ---
         self.camera_settings.set_model(model, data)
         self.camera_settings.set_init_settings(camera.get("init", None))
 
@@ -195,7 +192,7 @@ class Simulation:
         else:
             self.camera_settings.follow_object = "none"
 
-        # Initialize Velocities
+        # Initialize Velocities and FIX #2: Build geom_id mapping
         for i, obj in enumerate(objects):
             joint_id = mujoco.mj_name2id(
                 model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free"
@@ -204,8 +201,14 @@ class Simulation:
             data.qvel[adr : adr + 6] = [*obj["velocity"], *obj["angular_velocity"]]
 
             geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, f"geom_obj{i}")
+            obj_id = obj.get("id", f"geom_obj{i}")
+
+            # store bidirectional mapping
+            self.geom_id_to_obj_id[geom_id] = obj_id
+            self.obj_id_to_geom_id[obj_id] = geom_id
+
             objects[i]["geom_id"] = geom_id
-            objects[i]["id"] = f"geom_obj{i}"
+            objects[i]["id"] = obj_id
 
         physics = PhysicsTaxonomy(objects)
         prev_frame_data = self._get_obj_data(model, data, objects)
@@ -214,6 +217,7 @@ class Simulation:
         segmentation_frames = []
         annotation_frames = []
         prev_time = data.time
+        frame_count = 0  # Frame counter for timing
 
         # Prepare for rendering
         cam_mode = camera.get("mode", 0)
@@ -233,21 +237,20 @@ class Simulation:
                         dynamic=True,
                     )
 
-                # --- RENDER LOGIC (at framerate) ---
-                if len(normal_frames) < data.time * framerate:
+                # --- Use frame counter instead of floating point comparison ---
+                target_frame = int(data.time * framerate)
+                if frame_count <= target_frame:
                     # 1. Decide which camera to use for rendering
-                    # If moving, use the dynamic object. If static, use the ID (or the object, doesn't matter if static)
-                    # CRITICAL FIX: Use self.camera_settings.camera (the object), NOT cam_id (the int)
                     render_cam = self.camera_settings.camera
 
                     # 2. Render RGB
                     renderer.disable_segmentation_rendering()
-                    renderer.update_scene(data, camera=render_cam)  # <--- FIX HERE
+                    renderer.update_scene(data, camera=render_cam)
                     normal_frames.append(renderer.render())
 
                     # 3. Render Segmentation
                     renderer.enable_segmentation_rendering()
-                    renderer.update_scene(data, camera=render_cam)  # <--- FIX HERE
+                    renderer.update_scene(data, camera=render_cam)
                     seg_frame = renderer.render()
                     segmentation_frames.append(
                         self.__convert_segmentation_to_mask(seg_frame)
@@ -263,8 +266,14 @@ class Simulation:
                     dt_step = current_time - prev_time
                     prev_time = current_time
 
+                    # Pass mapping to physics taxonomy
                     events = physics.get_taxonomy(
-                        model, data, dt_step, prev_frame_data, annotation["objects"]
+                        model,
+                        data,
+                        dt_step,
+                        prev_frame_data,
+                        annotation["objects"],
+                        geom_id_to_obj_id=self.geom_id_to_obj_id,
                     )
 
                     annotation_all = {
@@ -281,6 +290,7 @@ class Simulation:
                     annotation_frames.append(
                         {
                             "time": current_time,
+                            "frame_index": frame_count,  # FIX #5: Store frame index
                             "objects": annotation_all,
                             "interactions": pairs,
                         }
@@ -288,6 +298,7 @@ class Simulation:
 
                     # Update previous frame data
                     prev_frame_data = self._get_obj_data(model, data, objects)
+                    frame_count += 1
 
         # Save outputs
         normal_video_filename = f"{path}simulation_objects.mp4"
@@ -305,6 +316,14 @@ class Simulation:
             },
             "objects": objects,
             "frames": annotation_frames,
+            "metadata": {
+                "total_frames": frame_count,
+                "duration": duration,
+                "framerate": framerate,
+                "geom_id_to_obj_id": {
+                    str(k): v for k, v in self.geom_id_to_obj_id.items()
+                },
+            },
         }
         file_path = f"{path}meta.json"
         save_file(file_path, data_export)

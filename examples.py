@@ -42,11 +42,11 @@ def generate_obj_json_like(
     obj_data["elasticity"] = elasticity
     obj_data["friction"] = friction
     if x_position:
-        print(obj_data["init_possition_x"])
-        obj_data["init_possition_x"] = x_position
-        print(obj_data["init_possition_x"])
+        print(obj_data["init_position_x"])
+        obj_data["init_position_x"] = x_position
+        print(obj_data["init_position_x"])
     if y_position:
-        obj_data["init_possition_y"] = y_position
+        obj_data["init_position_y"] = y_position
     return obj_data
 
 

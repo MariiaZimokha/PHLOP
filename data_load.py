@@ -79,7 +79,7 @@ class PHOLPhysicsDataset(Dataset):
                 "elasticity": elasticity,
                 "velocity": velocity,
                 "position": [
-                    float(obj.get(f"init_possition_{ax}", 0)) for ax in ["x", "y"]
+                    float(obj.get(f"init_position_{ax}", 0)) for ax in ["x", "y"]
                 ]
                 + [0],
                 "material": obj.get("material", "unknown"),

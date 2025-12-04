@@ -4,10 +4,13 @@ import matplotlib.colors as mcolors
 from typing import List, Dict
 from collections import defaultdict
 import re
+import numpy as np
 
 
 class QuestionAnswers:
-    def __init__(self, file_path: str, fps: int = 25):
+    def __init__(
+        self, file_path: str, fps: int = 25, include_hard_questions: bool = True
+    ):
         self.fps = fps
         self.data = self._load_json(file_path)
         self.frames = self.data.get("frames", [])
@@ -17,6 +20,7 @@ class QuestionAnswers:
         self.motion_re = re.compile(
             r"sliding|rolling|accelerating|decelerating", re.IGNORECASE
         )
+        self.include_hard_questions = include_hard_questions
 
     def _load_json(self, path: str) -> Dict:
         with open(path, "r") as f:
@@ -44,9 +48,7 @@ class QuestionAnswers:
             color_name = self._rgba_to_name(color)
             props[obj["id"]] = {
                 "mass": float(obj.get("mass", 1.0)),
-                "friction": [float(x) for x in obj.get("friction", "").split()]
-                if obj.get("friction")
-                else [0.4],
+                "friction": obj.get("friction", "0.4 0 0"),
                 "shape": obj.get("geom_type", "object"),
                 "material": obj.get("material", "unknown"),
                 "color": color_name,
@@ -72,6 +74,7 @@ class QuestionAnswers:
             "moving_to_stationary": set(),
             "stationary_to_moving": set(),
             "rolling": set(),
+            "spinning": set(),
         }
 
         for obj_id, label_seq in taxonomy.items():
@@ -80,6 +83,8 @@ class QuestionAnswers:
                 current = labels[-1].lower() if labels else ""
                 if "rolling" in current:
                     transitions["rolling"].add(obj_id)
+                if "spinning" in current:
+                    transitions["spinning"].add(obj_id)
                 if prev:
                     if (
                         any(
@@ -98,14 +103,32 @@ class QuestionAnswers:
         return transitions
 
     def _identify_collisions(self):
-        collision_pairs = set()
+        """Extract collision information with analysis."""
+        collisions = []
         for frame in self.frames:
             for interaction in frame.get("interactions", []):
-                ids = [f"geom_obj{int(i) - 1}" for i in interaction]
-                if len(ids) >= 2:
-                    pair = tuple(sorted(ids[:2]))
-                    collision_pairs.add(pair)
-        return list(collision_pairs)
+                if len(interaction) >= 2:
+                    g1, g2 = interaction[0], interaction[1]
+                    obj_ids = [f"geom_obj{g1 - 1}", f"geom_obj{g2 - 1}"]
+
+                    # Extract collision analysis from taxonomy
+                    for obj_id in obj_ids:
+                        obj_data = frame["objects"].get(obj_id, {})
+                        for tax in obj_data.get("taxonomy", []):
+                            if "Collision" in tax.get("labels", [""])[0]:
+                                collisions.append(
+                                    {
+                                        "obj_ids": tuple(sorted(obj_ids)),
+                                        "time": frame.get("time", 0),
+                                        "frame": frame.get("frame_index", 0),
+                                        "collision_type": tax.get("labels", [""])[0],
+                                        "context": tax.get("context", {}),
+                                        "energy_analysis": tax.get("energy_analysis"),
+                                        "momentum_check": tax.get("momentum_check"),
+                                    }
+                                )
+
+        return collisions
 
     def _get_most_collided_object(self):
         count = defaultdict(int)
@@ -121,134 +144,159 @@ class QuestionAnswers:
         max_val = max(count.values())
         return [k for k, v in count.items() if v == max_val]
 
-    def _get_kinematic_loss(self, collision_pairs, props, annotations):
+    def _get_collision_questions(self, collisions):
+        """Generate questions from collision analysis data."""
         questions = []
 
-        for obj1_id, obj2_id in collision_pairs:
-            if obj1_id not in props or obj2_id not in props:
+        for collision in collisions[:3]:  # Limit to first 3 collisions
+            obj_ids = collision["obj_ids"]
+            if obj_ids[0] not in self.props or obj_ids[1] not in self.props:
                 continue
 
-            p1, p2 = props[obj1_id], props[obj2_id]
+            p1, p2 = self.props[obj_ids[0]], self.props[obj_ids[1]]
             desc1 = self._describe_obj(p1)
             desc2 = self._describe_obj(p2)
+            collision_type = collision.get("collision_type", "Unknown")
+            time_sec = collision.get("time", 0)
 
-            valid_frames = [
-                (i, frame)
-                for i, frame in enumerate(annotations["frames"])
-                if obj1_id in frame["objects"] and obj2_id in frame["objects"]
-            ]
-            if not valid_frames:
-                continue
-
-            peak_frame_idx = 0
-            max_delta_v = 0
-            for i, frame in valid_frames:
-                v1 = frame["objects"][obj1_id].get("velocity", [0, 0, 0])
-                v2 = frame["objects"][obj2_id].get("velocity", [0, 0, 0])
-                delta_v = sum((v1[i] - v2[i]) ** 2 for i in range(3))
-                if delta_v > max_delta_v:
-                    max_delta_v = delta_v
-                    peak_frame_idx = i
-
-            pre_idx = max(0, peak_frame_idx - 1)
-            post_idx = min(len(annotations["frames"]) - 1, peak_frame_idx + 1)
-            pre_frame = annotations["frames"][pre_idx]
-            post_frame = annotations["frames"][post_idx]
-
-            if (
-                obj1_id not in pre_frame["objects"]
-                or obj2_id not in post_frame["objects"]
-            ):
-                continue
-
-            v1_before = pre_frame["objects"][obj1_id].get("velocity", [0, 0, 0])
-            v2_before = pre_frame["objects"][obj2_id].get("velocity", [0, 0, 0])
-            v1_after = post_frame["objects"][obj1_id].get("velocity", [0, 0, 0])
-            v2_after = post_frame["objects"][obj2_id].get("velocity", [0, 0, 0])
-
-            def kinetic_energy(v, m):
-                return 0.5 * m * sum(vi**2 for vi in v)
-
-            ke1_before = kinetic_energy(v1_before, p1["mass"])
-            ke1_after = kinetic_energy(v1_after, p1["mass"])
-            ke2_before = kinetic_energy(v2_before, p2["mass"])
-            ke2_after = kinetic_energy(v2_after, p2["mass"])
-
-            total_ke_before = ke1_before + ke2_before
-            total_ke_after = ke1_after + ke2_after
-            percent_ke_loss = (
-                100 * (total_ke_before - total_ke_after) / total_ke_before
-                if total_ke_before > 0
-                else 0
+            # Q1: Collision type classification
+            questions.append(
+                {
+                    "question": f"At t={time_sec:.2f}s, a collision occurred between a {desc1} and a {desc2}. The collision was classified as '{collision_type}'. What does this tell us about energy conservation?",
+                    "answer": "Elastic collisions conserve kinetic energy; inelastic collisions dissipate some energy as heat/sound/deformation."
+                    if collision_type == "Elastic Collision"
+                    else "This collision dissipated energy to heat, sound, and deformation.",
+                    "options": [
+                        "Elastic collisions conserve kinetic energy; inelastic collisions dissipate some energy as heat/sound/deformation.",
+                        "All collisions conserve energy equally.",
+                        "Elastic and inelastic collisions are the same thing.",
+                        "Energy is always lost in collisions.",
+                    ]
+                    if collision_type == "Elastic Collision"
+                    else [
+                        "This collision dissipated energy to heat, sound, and deformation.",
+                        "No energy was lost in this collision.",
+                        "This collision conserved all kinetic energy.",
+                        "The collision type doesn't affect energy.",
+                    ],
+                    "answer_type": "multiple_choice",
+                    "difficulty": "medium",
+                    "category": "Collision Physics",
+                }
             )
 
-            contact_frames = []
-            for i, frame in enumerate(annotations["frames"]):
-                for interaction in frame.get("interactions", []):
-                    involved = {f"geom_obj{int(oid) - 1}" for oid in interaction}
-                    if {obj1_id, obj2_id}.issubset(involved):
-                        contact_frames.append(i)
-                        break
+            # Q2: Momentum conservation
+            momentum_check = collision.get("momentum_check", {})
+            if momentum_check:
+                is_conserved = momentum_check.get("conserved", True)
+                ratio = momentum_check.get("ratio", 1.0)
 
-            if contact_frames:
-                duration = (max(contact_frames) - min(contact_frames) + 1) / self.fps
-            else:
-                duration = 0.0
-
-            def make_opts(true_val, is_percent=True):
-                a = round(true_val * 0.8, 1 if is_percent else 2)
-                b = round(
-                    min(true_val + (10 if is_percent else 0.2), 100),
-                    1 if is_percent else 2,
-                )
-                c = round(
-                    abs(true_val - (50 if is_percent else 0.5)), 1 if is_percent else 2
-                )
-                opts = list({true_val, a, b, c})
-                random.shuffle(opts)
-                suffix = "%" if is_percent else "s"
-                return [
-                    f"{v:.1f}{suffix}" if is_percent else f"{v:.2f}{suffix}"
-                    for v in opts
-                ]
-
-            questions.extend(
-                [
+                questions.append(
                     {
-                        "question": f"What percentage of the system’s kinetic energy was lost when the {desc1} collided with the {desc2}?",
-                        "answer": f"{round(percent_ke_loss, 1):.1f}%",
-                        "options": make_opts(round(percent_ke_loss, 1)),
-                        "explanation": (
-                            "For each object, kinetic energy KE = 0.5·m·|v|². "
-                            "Compute before and after collision, sum them, then compute the percentage lost."
-                        ),
-                    },
+                        "question": f"During the collision at t={time_sec:.2f}s, momentum was {'conserved (ratio ≈ 1.0)' if is_conserved else f'not perfectly conserved (ratio = {ratio:.2f}). Why might this be?'}",
+                        "answer": "Momentum is always conserved in isolated collisions (Newton's third law)."
+                        if is_conserved
+                        else "External forces (like friction from the floor) may reduce momentum.",
+                        "options": [
+                            "Momentum is always conserved in isolated collisions (Newton's third law).",
+                            "Momentum is never conserved in collisions.",
+                            "Only energy is conserved, not momentum.",
+                            "Momentum conservation only applies to elastic collisions.",
+                        ]
+                        if is_conserved
+                        else [
+                            "External forces (like friction from the floor) may reduce momentum.",
+                            "Momentum is never conserved.",
+                            "The heavier object always loses momentum.",
+                            "Momentum was violating the laws of physics.",
+                        ],
+                        "answer_type": "multiple_choice",
+                        "difficulty": "medium",
+                        "category": "Collision Physics",
+                    }
+                )
+
+            # Q3: Energy transfer analysis
+            energy_analysis = collision.get("energy_analysis")
+            if energy_analysis:
+                questions.append(
                     {
-                        "question": f"How long did the collision between {desc1} and {desc2} last (video fps is {self.fps})?",
-                        "answer": f"{round(duration, 2):.2f}s",
-                        "options": make_opts(round(duration, 2), is_percent=False),
-                        "explanation": (
-                            "Count how many frames the two objects are interacting, then divide by the frame-rate."
+                        "question": f"The collision at t={time_sec:.2f}s showed '{energy_analysis}' energy behavior. What does this classification mean?",
+                        "answer": self._energy_classification_explanation(
+                            energy_analysis
                         ),
-                    },
-                ]
-            )
+                        "options": [
+                            self._energy_classification_explanation(energy_analysis),
+                            "All objects conserve the same amount of energy in collisions.",
+                            "Energy classification depends only on object color.",
+                            "This classification is random and meaningless.",
+                        ],
+                        "answer_type": "multiple_choice",
+                        "difficulty": "hard",
+                        "category": "Energy Transfer",
+                    }
+                )
+
+            # Q4: Relative velocity from context
+            context = collision.get("context", {})
+            if context:
+                rel_vel = context.get("relative_velocity_magnitude", 0)
+                is_head_on = context.get("is_head_on", False)
+
+                questions.append(
+                    {
+                        "question": f"Before collision, the relative velocity between objects was {rel_vel:.2f} m/s. The collision was {'head-on' if is_head_on else 'not head-on'}. How would this affect impact severity?",
+                        "answer": "Higher relative velocity means more severe impact and greater energy transfer."
+                        if rel_vel > 1.0
+                        else "Lower relative velocity means gentler impact with less energy transfer.",
+                        "options": [
+                            "Higher relative velocity means more severe impact and greater energy transfer.",
+                            "Lower relative velocity means more severe impact.",
+                            "Relative velocity doesn't affect impact severity.",
+                            "Only object mass affects impact severity.",
+                        ],
+                        "answer_type": "multiple_choice",
+                        "difficulty": "hard",
+                        "category": "Collision Physics",
+                    }
+                )
 
         return questions
+
+    def _energy_classification_explanation(self, classification):
+        """Get explanation for energy classification."""
+        explanations = {
+            "Elastic (Energy Conserved)": "Kinetic energy is conserved; objects bounce apart with minimal energy loss.",
+            "Partially Inelastic": "Some kinetic energy is lost, but objects don't stick together.",
+            "Highly Inelastic": "Most kinetic energy is dissipated; objects may stick together or move slowly after collision.",
+            "Negligible Initial Energy": "Objects had very low kinetic energy before collision.",
+        }
+        return explanations.get(classification, f"Energy behavior: {classification}")
 
     def get_questions_answers(self) -> List[Dict]:
         questions = []
 
-        # Base QAs
+        # ==================== BASIC QUESTIONS ====================
         questions.append(
             {
                 "question": "How many distinct physical objects appear during the video?",
                 "answer": str(len(self.props)),
+                "answer_type": "numerical",
+                "difficulty": "easy",
+                "category": "Counting",
             }
         )
 
         if self.props:
-            max_fr_obj = max(self.props.items(), key=lambda kv: kv[1]["friction"][0])[0]
+            # Find object with max friction
+            max_fr_obj = max(
+                self.props.items(),
+                key=lambda kv: float(
+                    kv[1]["friction"].split()[0]
+                    if isinstance(kv[1]["friction"], str)
+                    else kv[1]["friction"]
+                ),
+            )[0]
             correct = self._describe_obj(self.props[max_fr_obj])
             options = [self._describe_obj(p) for p in self.props.values()]
             random.shuffle(options)
@@ -257,71 +305,84 @@ class QuestionAnswers:
                     "question": "Which object had the highest friction coefficient?",
                     "options": options,
                     "answer": correct,
+                    "answer_type": "multiple_choice",
+                    "difficulty": "easy",
+                    "category": "Physical Properties",
                 }
             )
 
         taxonomy = self._get_taxonomy_sequences()
         transitions = self._get_state_transitions(taxonomy)
+
         questions.append(
             {
-                "question": "How many objects come to a complete stop during the video that we can see?",
+                "question": "How many objects come to a complete stop during the video?",
                 "answer": str(len(transitions["stopped_objects"])),
-            }
-        )
-        questions.append(
-            {
-                "question": "How many objects display rolling motion at any point in the video?",
-                "answer": str(len(transitions["rolling"])),
+                "answer_type": "numerical",
+                "difficulty": "easy",
+                "category": "State Tracking",
             }
         )
 
-        collision_pairs = self._identify_collisions()
-        has_collisions = bool(collision_pairs)
         questions.append(
             {
-                "question": "Are there any moments in the video where two or more objects collide or make physical contact?",
-                "answer": "Yes" if has_collisions else "No",
+                "question": "How many objects display rolling motion at any point?",
+                "answer": str(len(transitions["rolling"])),
+                "answer_type": "numerical",
+                "difficulty": "easy",
+                "category": "Motion Detection",
             }
         )
+
+        questions.append(
+            {
+                "question": "How many objects display spinning motion at any point?",
+                "answer": str(len(transitions["spinning"])),
+                "answer_type": "numerical",
+                "difficulty": "easy",
+                "category": "Motion Detection",
+            }
+        )
+
+        # ==================== COLLISION QUESTIONS ====================
+        collisions = self._identify_collisions()
+        has_collisions = bool(collisions)
+
+        questions.append(
+            {
+                "question": "Are there any collisions between objects in this video?",
+                "answer": "Yes" if has_collisions else "No",
+                "answer_type": "yes_no",
+                "difficulty": "easy",
+                "category": "Collision Detection",
+            }
+        )
+
         if has_collisions:
+            # Add collision-specific questions
+            questions.extend(self._get_collision_questions(collisions))
+
+            # Unique objects in collisions
             involved = set()
-            for a, b in collision_pairs:
-                involved.update([a, b])
+            for collision in collisions:
+                involved.update(collision["obj_ids"])
+
             questions.append(
                 {
-                    "question": "How many unique objects were involved in collision throughout the video?",
+                    "question": "How many unique objects were involved in collisions?",
                     "answer": str(len(involved)),
+                    "answer_type": "numerical",
+                    "difficulty": "medium",
+                    "category": "Collision Detection",
                 }
             )
 
-            most_collided = self._get_most_collided_object()
-            if most_collided:
-                options = [self._describe_obj(self.props[o]) for o in self.props]
-                answers = [
-                    self._describe_obj(self.props[o])
-                    for o in most_collided
-                    if o in self.props
-                ]
-                random.shuffle(options)
-                questions.append(
-                    {
-                        "question": "Which object was involved in the most collisions with other objects?",
-                        "options": options,
-                        "answer": answers,
-                        "multiple_answers": len(answers) > 1,
-                    }
-                )
-
-            # Append kinetic energy + duration questions
-            questions.extend(
-                self._get_kinematic_loss(collision_pairs, self.props, self.data)
-            )
-
-        # Stationary duration & start time
+        # ==================== TEMPORAL QUESTIONS ====================
         for obj_id, p in self.props.items():
             desc = self._describe_obj(p)
             count_stat = 0
             first_stat_frame = None
+
             for i, fr in enumerate(self.frames):
                 obj = fr.get("objects", {}).get(obj_id)
                 if not obj:
@@ -338,14 +399,13 @@ class QuestionAnswers:
                 continue
 
             true_seconds = round(count_stat / self.fps, 2)
-            dur_opts = list(
-                {
-                    true_seconds,
-                    true_seconds * 0.8,
-                    true_seconds * 1.2,
-                    abs(true_seconds - 1.0),
-                }
-            )
+            dur_opts = [
+                true_seconds,
+                true_seconds * 0.8,
+                true_seconds * 1.2,
+                abs(true_seconds - 1.0),
+            ]
+            dur_opts = [round(v, 2) for v in dur_opts if v > 0]
             while len(dur_opts) < 4:
                 dur_opts.append(round(true_seconds + random.uniform(0.1, 1.0), 2))
             opts = [f"{v:.2f}s" for v in dur_opts]
@@ -356,30 +416,34 @@ class QuestionAnswers:
                     "question": f"How many seconds did the {desc} spend stationary?",
                     "options": opts,
                     "answer": f"{true_seconds:.2f}s",
-                    "explanation": f"Count the number of video frames labelled ‘stationary’ for this object, then divide by the frame-rate ({self.fps} fps).",
+                    "answer_type": "numerical",
+                    "difficulty": "medium",
+                    "category": "Temporal Reasoning",
                 }
             )
 
             if first_stat_frame is not None:
                 start_time = round(first_stat_frame / self.fps, 2)
-                ts_opts = list(
-                    {
-                        start_time,
-                        max(start_time - 0.4, 0),
-                        start_time + 0.4,
-                        abs(start_time - 1.0),
-                    }
-                )
+                ts_opts = [
+                    start_time,
+                    max(start_time - 0.4, 0),
+                    start_time + 0.4,
+                    abs(start_time - 1.0),
+                ]
+                ts_opts = [round(v, 2) for v in ts_opts if v >= 0]
                 while len(ts_opts) < 4:
                     ts_opts.append(round(start_time + random.uniform(0.1, 1.0), 2))
                 time_opts = [f"{v:.2f}s" for v in ts_opts]
                 random.shuffle(time_opts)
+
                 questions.append(
                     {
-                        "question": f"At what time in the video does the {desc} first become stationary?",
+                        "question": f"At what time does the {desc} first become stationary?",
                         "options": time_opts,
                         "answer": f"{start_time:.2f}s",
-                        "explanation": f"Find the first frame where the object is labeled ‘stationary’, then divide the frame index by the frame-rate ({self.fps} fps).",
+                        "answer_type": "numerical",
+                        "difficulty": "medium",
+                        "category": "Temporal Reasoning",
                     }
                 )
 

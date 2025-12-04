@@ -25,9 +25,11 @@ physics parameters, taxonomy labels or both).
 |                               |                             | Stationary                                    |
 |                               | ~~Projectile Motion~~           | ~~With Air Resistance~~                           |
 |                               |                             | ~~Without Air Resistance~~                       |
-|                               | Rotational Motion           | Pure Rotation                                 |
+|                               | Rotational Motion           | Pure Spinning                                 |
 |                               |                             | Rolling Motion                                |
-|                               |                             | Rolling Motion With Slipping                  |
+|                               |                             | Rolling Motion                                |
+|                               |                             | Rolling Motion with Slipping                                |
+|                               |                             | Spinning While Sliding                  |
 | **Interaction Events**        | Collisions                  | Elastic Collision                             |
 |                               |                             | Inelastic Collision                           |
 |                               | ~~Rebounds~~                    | ~~Surface Rebound~~                               |

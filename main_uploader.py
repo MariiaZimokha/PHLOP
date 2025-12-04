@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from huggingface_hub import HfApi
+from tqdm import tqdm
 
-# from dataset.simulator import Simulation
 from dataset.simulator import Simulation
 from dataset.video_annotation_visualizer import VideoAnnotationVisualizer
 from dataset.world.object import Object
@@ -115,8 +115,6 @@ def upload_shard_to_hf(
         f"  ✅ Shard {shard_id} upload complete ({uploaded_count}/{total_files} files)"
     )
     return True
-
-
 
 
 def calculate_adaptive_distance(elevation_angle, angle_range, distance_range):
@@ -280,8 +278,6 @@ def run_single_simulation(
 
 
 def generate_training_shard(shard_id, start_idx, count):
-    # def generate_training_shard(shard_id, start_idx, count, upload_to_hf=False, hf_repo_id=None):
-
     obj = Object()
     annotator = Annotator()
     sim = Simulation(obj, annotator=annotator, width=WIDTH, height=HEIGHT)
@@ -324,6 +320,7 @@ def generate_training_shard(shard_id, start_idx, count):
                 "qa_pairs": json.dumps(out["qa_pairs"]),
             }
         )
+        print(' out["metadata"] ', out["metadata"])
 
     # df = pd.DataFrame(rows)
     # df.to_parquet(OUTPUT_DIR / f"train_shard_{shard_id:04d}.parquet", index=False)
@@ -337,12 +334,12 @@ def generate_training_shard(shard_id, start_idx, count):
     # Upload to HuggingFace if requested
     # if upload_to_hf and hf_repo_id:
     upload_shard_to_hf(
-        shard_id=shard_id,
-        shard_dir=OUTPUT_DIR,
-        repo_id=HF_REPO,
-        split="train",
-        parquet_filename=parquet_filename,
-    )
+            shard_id=shard_id,
+            shard_dir=OUTPUT_DIR,
+            repo_id=HF_REPO,
+            split="train",
+            parquet_filename=parquet_filename,
+        )
 
 
 def generate_validation_shard(shard_id, start_idx, count, split):
@@ -449,9 +446,14 @@ def main():
     # TRAIN_COUNT, VAL_COUNT, TEST_COUNT
 
     if split == "train":
-        while current_idx < 50:
+        # while current_idx < 10:
+        total_examples = (
+            100  # keep test-size behavior; replace with TRAIN_COUNT if available
+        )
+        total_shards = (total_examples + SHARD_SIZE - 1) // SHARD_SIZE
+        for shard_id in tqdm(range(total_shards), desc="train shards"):
             # while current_idx < TRAIN_COUNT:
-            # process_shard(shard_id, current_idx, SHARD_SIZE, split=split)
+            print("shard_id", shard_id)
             generate_training_shard(shard_id, current_idx, SHARD_SIZE)
             current_idx += SHARD_SIZE
             shard_id += 1
@@ -460,7 +462,6 @@ def main():
         total_count = VAL_COUNT if split == "val" else TEST_COUNT
         while current_idx < 10:
             # while current_idx < total_count:
-            # process_shard(shard_id, current_idx, SHARD_SIZE, split=split)
             generate_validation_shard(shard_id, current_idx, SHARD_SIZE, split=split)
             current_idx += SHARD_SIZE
             shard_id += 1

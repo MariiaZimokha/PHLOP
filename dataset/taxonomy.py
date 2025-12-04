@@ -11,66 +11,110 @@ class PhysicsTaxonomy:
         self.motion_history = {
             obj["id"]: deque(maxlen=self.MOTION_WINDOW_SIZE) for obj in objects
         }
-        # self.COLLISION_ELASTIC_FACTOR = 0.5  # Threshold for elastic collision classification
-        self.FORCE_THRESHOLD = 10.0  # Example threshold for push/pull detection
-
         self.physics_engine = PhysicsEngine()
+        self.prev_collision_pairs = set()
 
     def analyze_motion(self, object_id, vel_prev, vel_curr, dt):
+        """Analyze linear motion state."""
         current_motion = self.physics_engine.detect_linear_motion(
             vel_prev, vel_curr, dt
         )
         return {
             "category": "Kinematic Events",
-            "subcategory": "Linear motion",
+            "subcategory": "Linear Motion",
             "labels": [current_motion],
         }
 
-    def detect_collision(self, model, data, prev_frame, current_objects):
+    def detect_collision(
+        self, model, data, prev_frame, current_objects, geom_id_to_obj_id
+    ):
         """
-        Detect collisions between objects and classify them as elastic or inelastic.
-        Returns a dictionary of collision results for each interacting pair.
+        Detect collisions and classify them.
+        Only records collision ONCE when first detected.
         """
         collision_results = {}
+        current_collision_pairs = set()
+
         for i in range(data.ncon):
             contact = data.contact[i]
             g1, g2 = contact.geom1, contact.geom2
 
-            # Skip if either geom is the world (geom_id = 0) - floor
+            # Skip floor collisions (geom_id = 0)
             if g1 == 0 or g2 == 0:
                 continue
+
             pair = tuple(sorted((g1, g2)))
+            current_collision_pairs.add(pair)
 
-            # Compute normal direction from the contact frame
+            # Skip if already detected in previous frame
+            if pair in self.prev_collision_pairs:
+                continue
+
+            # Compute contact normal
             normal = contact.frame[:3]
-            normal = normal / (np.linalg.norm(normal) + 1e-6)
+            normal_mag = np.linalg.norm(normal)
+            if normal_mag > 0:
+                normal = normal / normal_mag
 
-            # Get object IDs and their velocities before the collision
-            vel1_id = next(
-                (obj["id"] for obj in self.objects if obj["geom_id"] == g1), None
-            )
-            vel2_id = next(
-                (obj["id"] for obj in self.objects if obj["geom_id"] == g2), None
-            )
+            # Get object IDs from geom_id mapping
+            vel1_id = geom_id_to_obj_id.get(g1)
+            vel2_id = geom_id_to_obj_id.get(g2)
+
+            if vel1_id is None or vel2_id is None:
+                continue
+
+            # Get velocities before and after
             vel1_pre = prev_frame.get(vel1_id, {}).get("velocity", [])
             vel2_pre = prev_frame.get(vel2_id, {}).get("velocity", [])
             vel1_post = current_objects.get(vel1_id, {}).get("velocity", [])
             vel2_post = current_objects.get(vel2_id, {}).get("velocity", [])
-            if not vel1_pre or not vel2_pre or not vel1_post or not vel2_post:
+
+            if not all([vel1_pre, vel2_pre, vel1_post, vel2_post]):
                 continue
 
+            # Classify collision
             collision_type = self.physics_engine.detect_collision(
                 vel1_pre, vel2_pre, vel1_post, vel2_post, normal
             )
+
             if collision_type:
+                # Get masses
+                mass1 = next(
+                    (o["mass"] for o in self.objects if o["id"] == vel1_id), 1.0
+                )
+                mass2 = next(
+                    (o["mass"] for o in self.objects if o["id"] == vel2_id), 1.0
+                )
+
+                # Compute collision context
+                context = self.physics_engine.compute_collision_context(
+                    vel1_pre, vel2_pre, mass1, mass2, normal
+                )
+
+                # Compute energy transfer
+                energy_analysis = self.physics_engine.detect_energy_transfer(
+                    vel1_pre, vel2_pre, vel1_post, vel2_post, mass1, mass2
+                )
+
+                # Check momentum conservation
+                momentum_check = self.physics_engine.calculate_momentum_conservation(
+                    vel1_pre, vel2_pre, vel1_post, vel2_post, mass1, mass2
+                )
+
                 collision_results[pair] = {
                     "category": "Interaction Events",
-                    "subcategory": "Collisions",
+                    "subcategory": "Collision",
                     "labels": [collision_type],
+                    "context": context,
+                    "energy_analysis": energy_analysis,
+                    "momentum_check": momentum_check,
                 }
+
+        self.prev_collision_pairs = current_collision_pairs
         return collision_results
 
     def map_motion_state(self, motion):
+        """Map motion to higher-level state."""
         if motion == "Stationary":
             return "Stationary"
         elif motion in ("Constant Velocity", "Accelerating", "Decelerating"):
@@ -80,8 +124,7 @@ class PhysicsTaxonomy:
 
     def detect_state_transitions(self, cur_velocity, prev_velocity, object_id, dt):
         """
-        if velocity magnitude approching 0 over time : Moving -> Stopping (due to friction)
-        if prev_velocity is 0, and current >0 : Stationary -> Moving (due External Forces)
+        Detect state changes: Moving→Stopping (friction) or Stationary→Moving (force)
         """
         cur_motion = self.physics_engine.detect_linear_motion(
             prev_velocity, cur_velocity, dt
@@ -104,125 +147,143 @@ class PhysicsTaxonomy:
 
         if cur_motion:
             self.motion_history[object_id].append(cur_motion)
+
         return state_transition
 
     def get_state_transitions_labels(self, cur_velocity, prev_velocity, object_id, dt):
+        """Get state transition event."""
         label = self.detect_state_transitions(
             cur_velocity, prev_velocity, object_id, dt
         )
         if label:
             return {
-                "category": "State transitions",
+                "category": "State Transitions",
                 "subcategory": "Motion Change",
                 "labels": [label],
             }
-            # if subcategory == "Moving to Stopping":
-            #     return {
-            #         "category": "State transitions",
-            #         "subcategory": subcategory,
-            #         "labels": ["Friction causes deceleration"]
-            #     }
-            # if subcategory == "Stationary to Moving":
-            #     return {
-            #         "category": "State transitions",
-            #         "subcategory": subcategory,
-            #         "labels": ["Force overcomes static friction"]
-            #     }
         return None
 
     def get_rotational_motions(self, angular_velocity, linear_velocity, radius, shape):
-        if shape == "ball":
-            rotational_motion = self.physics_engine.detect_rotational_motion(
-                angular_velocity, linear_velocity, radius
-            )
-            if rotational_motion:
-                return {
-                    "category": "Kinematic Events",
-                    "subcategory": "Rotational Motion",
-                    "labels": [rotational_motion],
-                }
+        """
+        Detect rotational motion for any shape.
+        Returns: Pure Rotation, Rolling Motion, Rolling with Slipping, or None
+        """
+        rotational_motion = self.physics_engine.detect_rotational_motion(
+            angular_velocity, linear_velocity, radius
+        )
+        if rotational_motion:
+            return {
+                "category": "Kinematic Events",
+                "subcategory": "Rotational Motion",
+                "labels": [rotational_motion],
+            }
         return None
 
     def environmental_interactions(
         self, cur_velocity, prev_velocity, dt, friction_coefficient
     ):
+        """Detect friction effects."""
         cur_velocity = np.array(cur_velocity)
         prev_velocity = np.array(prev_velocity)
-        acceleration = (cur_velocity - prev_velocity) / dt
+        acceleration = (cur_velocity - prev_velocity) / max(dt, 1e-6)
+
         friction_event = self.physics_engine.detect_friction_event(
             cur_velocity, acceleration, friction_coefficient
         )
+
         if friction_event:
             return {
                 "category": "Environmental Interactions",
-                "subcategory": "Friction-Induced Events",
+                "subcategory": "Friction",
                 "labels": [friction_event],
             }
         return None
 
     def get_friction_coefficients(self, friction):
-        # Allow friction to be a single value or a list of coefficients.
-        if isinstance(friction, list) and len(friction) == 3:
-            return {
-                "sliding": friction[0],  # Sliding friction
-                "torsional": friction[1],  # Torsional friction
-                "rolling": friction[2],  # Rolling friction
-            }
-        return {"sliding": friction}
+        """Parse friction coefficient(s)."""
+        if isinstance(friction, list) and len(friction) >= 1:
+            return {"sliding": float(friction[0])}
+        elif isinstance(friction, (int, float)):
+            return {"sliding": float(friction)}
+        elif isinstance(friction, str):
+            try:
+                parts = [float(f) for f in friction.split()]
+                return {"sliding": float(parts[0])} if parts else {"sliding": 0.4}
+            except (ValueError, IndexError):
+                return {"sliding": 0.4}
+        return {"sliding": 0.4}
 
-    def get_taxonomy(self, model, data, dt, prev_frame, current_objects):
+    def get_taxonomy(
+        self, model, data, dt, prev_frame, current_objects, geom_id_to_obj_id
+    ):
+        """
+        Main taxonomy computation for all objects.
+
+        Returns: Dictionary mapping object_id → list of taxonomy events
+        """
         results = {obj["id"]: [] for obj in self.objects}
-        dt = max(dt, 1e-6)  # avoid division by zero
+        dt = max(dt, 1e-6)
+
+        # Detect collisions first
         collision_results = self.detect_collision(
-            model, data, prev_frame, current_objects
+            model, data, prev_frame, current_objects, geom_id_to_obj_id
         )
 
+        # Analyze each object
         for obj in self.objects:
             object_id = obj.get("id", "")
-            friction = obj.get("friction", "0 0 0")
-            friction = [float(f) for f in friction.split(" ")]
+            if not object_id:
+                continue
+
+            # Get current and previous states
             cur_velocity = current_objects.get(object_id, {}).get("velocity", [])
+            prev_velocity = prev_frame.get(object_id, {}).get("velocity", [])
             cur_angular_velocity = current_objects.get(object_id, {}).get(
                 "angular_velocity", []
             )
-            prev_velocity = prev_frame.get(object_id, {}).get("velocity", [])
 
-            # Linear motion analysis
+            if not cur_velocity or not prev_velocity:
+                continue
+
+            # 1. Linear motion
             linear_motion = self.analyze_motion(
-                object_id, prev_velocity[:3], cur_velocity, dt
+                object_id, prev_velocity, cur_velocity, dt
             )
             if linear_motion:
                 results[object_id].append(linear_motion)
 
-            # Detect state transitions
+            # 2. State transitions
             state_transitions = self.get_state_transitions_labels(
-                cur_velocity, prev_velocity[:3], object_id, dt
+                cur_velocity, prev_velocity, object_id, dt
             )
             if state_transitions:
                 results[object_id].append(state_transitions)
 
-            # Detect rotational motion
-            radius = obj.get("dimensions", {}).get("radius", 0)
-            shape = obj.get("shape", "")
+            # 3. Rotational motion
+            radius = obj.get("dimensions", {}).get("radius", 0.1)
             rotational_motion = self.get_rotational_motions(
-                cur_angular_velocity, cur_velocity, radius, shape
+                cur_angular_velocity, cur_velocity, radius, obj.get("shape", "")
             )
             if rotational_motion:
                 results[object_id].append(rotational_motion)
 
-            # Detect enviroment interections
-            friction_coefficients = self.get_friction_coefficients(friction)
+            # 4. Friction effects
+            friction_coeff = self.get_friction_coefficients(obj.get("friction", 0.4))[
+                "sliding"
+            ]
             friction_event = self.environmental_interactions(
-                cur_velocity, prev_velocity, dt, friction_coefficients["sliding"]
+                cur_velocity, prev_velocity, dt, friction_coeff
             )
             if friction_event:
                 results[object_id].append(friction_event)
 
-        # add collision results to the objects
+        # 5. Add collisions to objects involved
         for (g1, g2), collision_info in collision_results.items():
-            obj1_id = next(obj["id"] for obj in self.objects if obj["geom_id"] == g1)
-            obj2_id = next(obj["id"] for obj in self.objects if obj["geom_id"] == g2)
-            results[obj1_id].append(collision_info)
-            results[obj2_id].append(collision_info)
+            obj1_id = geom_id_to_obj_id.get(g1)
+            obj2_id = geom_id_to_obj_id.get(g2)
+
+            if obj1_id and obj2_id:
+                results[obj1_id].append(collision_info)
+                results[obj2_id].append(collision_info)
 
         return results
