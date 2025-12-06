@@ -1,4 +1,3 @@
-# split_config.py
 # material_components are based in constant.py
 SPLIT_CONFIG = {
     "train": {

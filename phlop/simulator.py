@@ -58,7 +58,8 @@ class Simulation:
         return random.choices(self.modes, weights=weights, k=1)[0]
 
     def __convert_segmentation_to_mask(self, seg_frame):
-        seg_ids = seg_frame[:, :, 0]
+        """Convert segmentation IDs to a colored mask."""
+        seg_ids = seg_frame[:, :, 0]  # Red channel contains segmentation IDs
         mask = np.zeros((seg_frame.shape[0], seg_frame.shape[1], 3), dtype=np.uint8)
         unique_ids = np.unique(seg_ids)
 
@@ -66,7 +67,7 @@ class Simulation:
             if geom_id not in self.seg_color_map:
                 self.seg_color_map[geom_id] = (
                     [0, 0, 0]
-                    if geom_id == 0
+                    if geom_id == 0 # floor
                     else np.random.randint(0, 255, size=3).tolist()
                 )
             mask[seg_ids == geom_id] = self.seg_color_map[geom_id]
@@ -82,9 +83,6 @@ class Simulation:
             objects.append(obj)
         return objects
 
-    #  def get_object(self, shape=None, material=None, density_idx=None,
-    # friction_idx=None,
-    # elasticity_idx=None):
     def _build_objects_from_specs(self, specs):
         objects = []
         for spec in specs:
@@ -216,7 +214,7 @@ class Simulation:
         else:
             self.camera_settings.follow_object = "none"
 
-        # Initialize Velocities and FIX #2: Build geom_id mapping
+        # Initialize Velocities
         for i, obj in enumerate(objects):
             joint_id = mujoco.mj_name2id(
                 model, mujoco.mjtObj.mjOBJ_JOINT, f"obj{i}_free"
@@ -314,7 +312,7 @@ class Simulation:
                     annotation_frames.append(
                         {
                             "time": current_time,
-                            "frame_index": frame_count,  # FIX #5: Store frame index
+                            "frame_index": frame_count,
                             "objects": annotation_all,
                             "interactions": pairs,
                         }
