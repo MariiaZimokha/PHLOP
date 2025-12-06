@@ -1,7 +1,7 @@
 import numpy as np
 from collections import deque
 
-from dataset.physics_engine import PhysicsEngine
+from phlop.physics_engine import PhysicsEngine
 
 
 class PhysicsTaxonomy:

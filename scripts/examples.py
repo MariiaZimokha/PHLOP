@@ -1,11 +1,11 @@
 import os
-from dataset.world.object import Object
-from dataset.annotator import Annotator
-from dataset.video_annotation_visualizer import VideoAnnotationVisualizer
-from dataset.simulator import Simulation
-from dataset.utils import save_file, set_position_and_velocity, set_physics_properties
-from dataset.video_qa import add_qa_to_video
-from dataset.question_answer import QuestionAnswers
+from phlop.world.object import Object
+from phlop.annotator import Annotator
+from phlop.video_annotation_visualizer import VideoAnnotationVisualizer
+from phlop.simulator import Simulation
+from phlop.utils import save_file, set_position_and_velocity, set_physics_properties
+from phlop.video_qa import add_qa_to_video
+from phlop.question_answer import QuestionAnswers
 
 # Initialize necessary objects
 obj = Object()

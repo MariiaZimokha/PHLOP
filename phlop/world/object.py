@@ -1,6 +1,6 @@
 import random
 import numpy as np
-from dataset.world.constants import (
+from phlop.world.constants import (
     SHAPES,
     Shapes,
     MATERIAL_MIXTURES,
@@ -19,7 +19,7 @@ class Object:
         self.colors = COLORS
         self.density_scaling_factor = DENSITY_SCALING_FACTOR
 
-    def __sample_from_mixture(self, mixture_list):
+    def _sample_from_mixture(self, mixture_list):
         """
         (mean, std, weight)
         """
@@ -29,7 +29,25 @@ class Object:
         mu, std, weight = mixture_list[dist_id]
         return np.random.normal(mu, std)
 
-    def __get_visual(self, material):
+    def _sample_from_component_subset(self, mixture_list, component_indices):
+        if not component_indices:
+            return self._sample_from_mixture(mixture_list)
+
+        valid = [i for i in component_indices if 0 <= i < len(mixture_list)]
+        if not valid:
+            return self._sample_from_mixture(mixture_list)
+
+        subset = [mixture_list[i] for i in valid]
+        weights = np.array([c[-1] for c in subset], dtype=float)
+        if np.any(np.isnan(weights)) or weights.sum() <= 0:
+            weights = np.ones(len(subset))
+        weights /= weights.sum()
+
+        idx = int(np.random.choice(len(subset), p=weights))
+        mu, std, _ = subset[idx]
+        return float(np.random.normal(mu, std))
+
+    def _get_visual(self, material):
         random_color_str = random.choice(list(self.colors.values()))
         r, g, b, _ = list(map(float, random_color_str.split()))
         alpha = self.material_visuals[material]["alpha"]
@@ -37,32 +55,40 @@ class Object:
         final_rgba_str = f"{r:.3f} {g:.3f} {b:.3f} {alpha:.3f}"
         return {"rgba": final_rgba_str, "specular": specular}
 
-    def get_object(self, shape=None, material=None):
+    def get_object(
+        self,
+        shape=None,
+        material=None,
+        density_idx=None,
+        friction_idx=None,
+        elasticity_idx=None,
+    ):
         if shape is None or shape not in SHAPES:
             shape = random.choice(SHAPES)
 
         material_keys = list(self.material_mixtures.keys())
+
         if material is None or material not in material_keys:
             material = random.choice(material_keys)
 
-        mixture_data = self.material_mixtures[material]
+        mixture = self.material_mixtures[material]
 
-        elasticity_val = self.__sample_from_mixture(mixture_data["elasticity_dist"])
-        density_val = self.__sample_from_mixture(mixture_data["density_dist"])
-        friction_static = self.__sample_from_mixture(
-            mixture_data["friction_dist_lateral"]
+        density_val = self._sample_from_component_subset(
+            mixture["density_dist"], density_idx
         )
-        friction_dynamic = self.__sample_from_mixture(
-            mixture_data["friction_dist_lateral"]
+        elasticity = self._sample_from_component_subset(
+            mixture["elasticity_dist"], elasticity_idx
         )
-        friction_rolling = self.__sample_from_mixture(
-            mixture_data["friction_dist_lateral"]
-        )
-        friction_str = (
-            f"{friction_static:.2f} {friction_dynamic:.2f} {friction_rolling:.2f}"
+        base_fric = self._sample_from_component_subset(
+            mixture["friction_dist_lateral"], friction_idx
         )
 
-        visual = self.__get_visual(material)
+        fric_static = max(0.0, base_fric + np.random.normal(0.0, 0.02))
+        fric_dynamic = max(0.0, base_fric * 0.95 + np.random.normal(0.0, 0.02))
+        fric_rolling = max(0.0, base_fric * 0.60 + np.random.normal(0.0, 0.01))
+        friction_str = f"{fric_static:.3f} {fric_dynamic:.3f} {fric_rolling:.3f}"
+
+        visual = self._get_visual(material)
 
         if shape == Shapes.BALL:
             radius = random.uniform(0.05, 0.1)
@@ -91,19 +117,19 @@ class Object:
         # linear_velocity = np.random.uniform(-1, 1, size=3)
         # angular_velocity = np.random.uniform(-1, 1, size=3)
         # Slow dynamic behavior
-        linear_velocity = 0.20 * np.random.uniform(-1, 1, size=3)
-        angular_velocity = 0.15 * np.random.uniform(-1, 1, size=3)
+        linear_velocity = (0.20 * np.random.uniform(-1, 1, 3)).tolist()
+        angular_velocity = (0.15 * np.random.uniform(-1, 1, 3)).tolist()
 
         return {
             "shape": shape,
             "material": material,
-            "material_shininess": self.material_shininess[material],
+            "material_shininess": float(self.material_shininess.get(material, 5)),
             "dimensions": dimensions,
-            "mass": mass_val,
-            "density": density_val,
-            "elasticity": float(f"{elasticity_val:.3f}"),  # round to 3 decimals
+            "mass": float(mass_val),
+            "density": float(density_val),
+            "elasticity": float(round(elasticity, 3)),  # round to 3 decimals
             "friction": friction_str,
             "visual": visual,
-            "velocity": linear_velocity.tolist(),
-            "angular_velocity": angular_velocity.tolist(),
+            "velocity": linear_velocity,
+            "angular_velocity": angular_velocity,
         }

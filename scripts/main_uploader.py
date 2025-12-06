@@ -1,16 +1,19 @@
+# main_uploader.py
 import json
 import os
+import shutil
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from huggingface_hub import HfApi
 from tqdm import tqdm
 
-from dataset.simulator import Simulation
-from dataset.video_annotation_visualizer import VideoAnnotationVisualizer
-from dataset.world.object import Object
-from dataset.annotator import Annotator
-from dataset.question_answer import QuestionAnswers
+from phlop.simulator import Simulation
+from phlop.split_config import SPLIT_CONFIG
+from phlop.video_annotation_visualizer import VideoAnnotationVisualizer
+from phlop.world.object import Object
+from phlop.annotator import Annotator
+from phlop.question_answer import QuestionAnswers
 import random
 
 from upload.config import (
@@ -24,6 +27,20 @@ from upload.config import (
     HEIGHT,
     FPS,
 )
+import tempfile
+import shutil
+
+
+def atomic_write_json(data, path):
+    """Write JSON atomically to prevent empty/corrupted files."""
+    dir_path = os.path.dirname(path)
+    os.makedirs(dir_path, exist_ok=True)
+
+    with tempfile.NamedTemporaryFile("w", dir=dir_path, delete=False) as tmp:
+        json.dump(data, tmp, indent=2)
+        temp_name = tmp.name
+
+    shutil.move(temp_name, path)
 
 
 def upload_file_to_hf(local_path: str, repo_id: str, path_in_repo: str):
@@ -227,6 +244,27 @@ def sample_camera_for_split(split: str, mode: str = "static"):
     }
 
 
+def build_object_specs(split_cfg, num_objects):
+    shapes = split_cfg["shapes"]
+    materials = split_cfg["materials"]
+    comp = split_cfg["material_components"]
+
+    specs = []
+    for _ in range(num_objects):
+        mat = random.choice(materials)
+
+        specs.append(
+            {
+                "shape": random.choice(shapes),
+                "material": mat,
+                "density_idx": comp[mat]["density_idx"],
+                "friction_idx": comp[mat]["friction_idx"],
+                "elasticity_idx": comp[mat]["elasticity_idx"],
+            }
+        )
+    return specs
+
+
 def run_single_simulation(
     sim: Simulation,
     num_objects: int,
@@ -237,8 +275,14 @@ def run_single_simulation(
     objects=None,
     floor=None,
     lights=None,
+    object_specs=None,
 ):
-    """Runs simulation and returns file paths + QA JSON."""
+    if scene_dir.exists():
+        for p in scene_dir.glob("*"):
+            if p.is_file():
+                p.unlink()
+            else:
+                shutil.rmtree(p)
     scene_dir.mkdir(parents=True, exist_ok=True)
 
     sim_out = sim.run_simulation(
@@ -250,6 +294,7 @@ def run_single_simulation(
         objects=objects,
         floor=floor,
         lights=lights,
+        object_specs=object_specs,
     )
 
     video_file = sim_out["video_file"]
@@ -263,10 +308,10 @@ def run_single_simulation(
         annotated_video_path=str(annotated_video),
     )
 
+    # --- ATOMIC QA WRITE ---
     qa_json_path = scene_dir / "qa.json"
     qa_pairs = QuestionAnswers(file_path).get_questions_answers()
-    with open(qa_json_path, "w") as f:
-        json.dump(qa_pairs, f, indent=2)
+    atomic_write_json(qa_pairs, qa_json_path)
 
     return {
         "video": video_file,
@@ -294,6 +339,8 @@ def generate_training_shard(shard_id, start_idx, count):
 
         scene_path = OUTPUT_DIR / f"train_{global_idx}"
         num_objects = random.randint(2, 6)
+        object_specs = build_object_specs(SPLIT_CONFIG["train"], num_objects)
+        # print(object_specs)
         # camera_cfg = sample_camera("train", cam_mode)
         camera_cfg = sample_camera_for_split(split="train", mode=cam_mode)
         # print("camera_cfg", camera_cfg)
@@ -305,6 +352,7 @@ def generate_training_shard(shard_id, start_idx, count):
             framerate=FPS,
             scene_dir=scene_path,
             camera_cfg=camera_cfg,
+            object_specs=object_specs,
         )
         # print("out ", out)
         rows.append(
@@ -331,15 +379,15 @@ def generate_training_shard(shard_id, start_idx, count):
 
     print(f"✅ Saved parquet: {parquet_filename}")
 
-    # Upload to HuggingFace if requested
-    # if upload_to_hf and hf_repo_id:
-    upload_shard_to_hf(
-            shard_id=shard_id,
-            shard_dir=OUTPUT_DIR,
-            repo_id=HF_REPO,
-            split="train",
-            parquet_filename=parquet_filename,
-        )
+    # # Upload to HuggingFace if requested
+    # # if upload_to_hf and hf_repo_id:
+    # upload_shard_to_hf(
+    #         shard_id=shard_id,
+    #         shard_dir=OUTPUT_DIR,
+    #         repo_id=HF_REPO,
+    #         split="train",
+    #         parquet_filename=parquet_filename,
+    #     )
 
 
 def generate_validation_shard(shard_id, start_idx, count, split):
@@ -448,7 +496,7 @@ def main():
     if split == "train":
         # while current_idx < 10:
         total_examples = (
-            100  # keep test-size behavior; replace with TRAIN_COUNT if available
+            10  # keep test-size behavior; replace with TRAIN_COUNT if available
         )
         total_shards = (total_examples + SHARD_SIZE - 1) // SHARD_SIZE
         for shard_id in tqdm(range(total_shards), desc="train shards"):

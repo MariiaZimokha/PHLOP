@@ -1,14 +1,14 @@
 import random
-from dataset.taxonomy import PhysicsTaxonomy
+from phlop.taxonomy import PhysicsTaxonomy
 import numpy as np
 import mujoco
 import imageio
 
-from dataset.utils import save_file, set_physics_properties, set_position_and_velocity
-from dataset.world.camera import CameraSettings
-from dataset.world.floor import Floor
-from dataset.world.light import Light
-from dataset.world.constants import MODES
+from phlop.utils import save_file, set_physics_properties, set_position_and_velocity
+from phlop.world.camera import CameraSettings
+from phlop.world.floor import Floor
+from phlop.world.light import Light
+from phlop.world.constants import MODES
 
 
 class Simulation:
@@ -82,6 +82,27 @@ class Simulation:
             objects.append(obj)
         return objects
 
+    #  def get_object(self, shape=None, material=None, density_idx=None,
+    # friction_idx=None,
+    # elasticity_idx=None):
+    def _build_objects_from_specs(self, specs):
+        objects = []
+        for spec in specs:
+            obj = self.obj.get_object(
+                shape=spec["shape"],
+                material=spec["material"],
+                density_idx=spec["density_idx"],
+                friction_idx=spec["friction_idx"],
+                elasticity_idx=spec["elasticity_idx"],
+            )
+
+            obj["mode"] = self.__get_mode()
+            obj = set_position_and_velocity(obj)
+            obj = set_physics_properties(obj)
+            objects.append(obj)
+
+        return objects
+
     def __build_assets_and_bodies(self, objects, floor, lights):
         asset_defs = []
         bodies_xml = []
@@ -138,8 +159,11 @@ class Simulation:
         path="",
         floor=None,
         lights=None,
+        object_specs=None,
     ):
-        if objects is None:
+        if object_specs is not None:
+            objects = self._build_objects_from_specs(object_specs)
+        elif objects is None:
             objects = self.__get_world_objects(num_objects)
         if camera is None:
             camera = {"mode": 0, "init": {}}
