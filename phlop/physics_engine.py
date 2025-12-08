@@ -79,97 +79,31 @@ class PhysicsEngine:
         - Pure spinning: v ≈ 0, ω > threshold
         - Spinning while sliding: ω·v / (|ω||v|) ≈ 1
         """
-
         angular_velocity = np.array(angular_velocity)
         linear_velocity = np.array(linear_velocity)
-
         angular_mag = np.linalg.norm(angular_velocity)
         linear_mag = np.linalg.norm(linear_velocity)
 
-        # Thresholds
-        MIN_SPIN = 0.3  # rad/s
-
-        #  No significant motion at all
+        # If both linear and angular velocities are very low, treat as no significant rotation
         if (
-            linear_mag < self.velocity_threshold
-            and angular_mag < self.velocity_threshold
+            linear_mag <= self.velocity_threshold
+            and angular_mag <= self.velocity_threshold
         ):
             return None
+        if (
+            linear_mag <= self.velocity_threshold
+            and angular_mag > self.velocity_threshold
+        ):
+            return "Pure Rotation"
 
-        # Only linear motion, no rotation
+        rolling_diff = linear_mag - angular_mag * radius
+        if abs(rolling_diff) < self.epsilon:
+            return "Rolling Motion"
         if (
             linear_mag > self.velocity_threshold
-            and angular_mag < self.velocity_threshold
+            and angular_mag > self.velocity_threshold
         ):
-            return None
-
-        if angular_mag > 1e-6:
-            rotation_axis = angular_velocity / angular_mag
-            vertical_alignment = abs(
-                rotation_axis[2]
-            )  # Dot product with global Z (0,0,1) is just the Z component
-            # is_vertical_axis: Rotation around Z (like a top or upright cylinder)
-            is_vertical_axis = vertical_alignment > 0.8
-            # is_horizontal_axis: Rotation around X/Y (like a rolling wheel)
-            is_horizontal_axis = vertical_alignment < 0.2
-        else:
-            is_vertical_axis = False
-            is_horizontal_axis = False
-
-        if angular_mag > MIN_SPIN:
-            # Pure Spinning: rotating in place
-            if linear_mag < self.velocity_threshold:
-                return "Pure Spinning"
-
-            if linear_mag > self.velocity_threshold and is_vertical_axis:
-                return "Spinning While Sliding"
-
-        # Both linear and angular motion present
-        if (linear_mag > self.velocity_threshold) and (angular_mag > MIN_SPIN):
-            if is_horizontal_axis:
-                vel_dir = linear_velocity / linear_mag
-                orthogonality = abs(np.dot(rotation_axis, vel_dir))
-
-                if orthogonality < 0.2:  #  small error margin
-                    # Check velocity matching v = r * w
-                    expected_linear_vel = angular_mag * radius
-                    rolling_diff = abs(linear_mag - expected_linear_vel)
-                    relative_error = rolling_diff / (linear_mag + 1e-6)
-
-                    if relative_error < 0.25:  # 25% tolerance
-                        return "Rolling Motion"
-                    else:
-                        return "Rolling Motion with Slipping"
-
-        # if (
-        #     linear_mag > self.velocity_threshold
-        #     and angular_mag > self.velocity_threshold
-        # ):
-        #     # Check axis alignment between ω and v
-        #     axis_dir = angular_velocity / (angular_mag + 1e-9)
-        #     vel_dir = linear_velocity / (linear_mag + 1e-9)
-        #     axis_alignment = abs(np.dot(axis_dir, vel_dir))
-
-        #     # Axis parallel to motion → spinning while sliding
-        #     if axis_alignment > 0.7:  # 70% aligned
-        #         return "Spinning While Sliding"
-
-        #     # Axis perpendicular → check rolling condition
-        #     if radius > 0:
-        #         # Expected linear velocity for pure rolling
-        #         expected_v = angular_mag * radius
-
-        #         # Relative difference
-        #         rel_diff = abs(linear_mag - expected_v) / max(
-        #             linear_mag, expected_v, 1e-6
-        #         )
-
-        #         if rel_diff < self.epsilon:
-        #             return "Rolling Motion"
-        #         else:
-        #             return "Rolling Motion with Slipping"
-
-        # No significant rotation detected
+            return "Rolling Motion with Slipping"
         return None
 
     def detect_friction_event(

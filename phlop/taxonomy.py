@@ -13,6 +13,8 @@ class PhysicsTaxonomy:
         }
         self.physics_engine = PhysicsEngine()
         self.prev_collision_pairs = set()
+        # Track rotational state per object to avoid redundant friction detection
+        self.rotational_state = {obj["id"]: None for obj in objects}
 
     def analyze_motion(self, object_id, vel_prev, vel_curr, dt):
         """Analyze linear motion state."""
@@ -168,21 +170,33 @@ class PhysicsTaxonomy:
         Detect rotational motion for any shape.
         Returns: Pure Rotation, Rolling Motion, Rolling with Slipping, or None
         """
-        rotational_motion = self.physics_engine.detect_rotational_motion(
-            angular_velocity, linear_velocity, radius
-        )
-        if rotational_motion:
-            return {
-                "category": "Kinematic Events",
-                "subcategory": "Rotational Motion",
-                "labels": [rotational_motion],
-            }
+        if shape == "ball":
+            rotational_motion = self.physics_engine.detect_rotational_motion(
+                angular_velocity, linear_velocity, radius
+            )
+            if rotational_motion:
+                return {
+                    "category": "Kinematic Events",
+                    "subcategory": "Rotational Motion",
+                    "labels": [rotational_motion],
+                }
         return None
 
     def environmental_interactions(
-        self, cur_velocity, prev_velocity, dt, friction_coefficient
+        self, cur_velocity, prev_velocity, dt, friction_coefficient, shape=None
     ):
-        """Detect friction effects."""
+        """
+        Detect friction effects.
+
+        IMPORTANT: Only detect sliding friction, NOT rolling friction.
+        - Skip if object is rolling (pure rolling or rolling with slip)
+        - Skip if object is pure spinning (no contact friction)
+        - Only detect for actual sliding: "Spinning While Sliding"
+        """
+        # Skip friction detection for rolling or pure spinning
+        if shape in ["ball", "cylinder"]:
+            return None
+
         cur_velocity = np.array(cur_velocity)
         prev_velocity = np.array(prev_velocity)
         acceleration = (cur_velocity - prev_velocity) / max(dt, 1e-6)
@@ -266,13 +280,27 @@ class PhysicsTaxonomy:
             )
             if rotational_motion:
                 results[object_id].append(rotational_motion)
+            # # Store rotational state for friction detection logic
+            # rotational_state = None
+            # if rotational_motion:
+            #     rotational_state = rotational_motion["labels"][0]
+            #     self.rotational_state[object_id] = rotational_state
+            #     results[object_id].append(rotational_motion)
+            # else:
+            #     # No rotational motion detected this frame
+            #     self.rotational_state[object_id] = None
 
-            # 4. Friction effects
+            # 4. Friction effects - ONLY for actual sliding (not rolling/spinning)
             friction_coeff = self.get_friction_coefficients(obj.get("friction", 0.4))[
                 "sliding"
             ]
             friction_event = self.environmental_interactions(
-                cur_velocity, prev_velocity, dt, friction_coeff
+                cur_velocity,
+                prev_velocity,
+                dt,
+                friction_coeff,
+                obj.get("shape", ""),
+                # rotational_state=self.rotational_state[object_id]
             )
             if friction_event:
                 results[object_id].append(friction_event)
