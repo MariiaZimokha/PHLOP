@@ -44,27 +44,40 @@ class PhysicsEngine:
         vel_curr = np.array(vel_curr)
         vel_curr_mag = round(np.linalg.norm(vel_curr), self.precision)
         vel_prev_mag = round(np.linalg.norm(vel_prev), self.precision)
+        dt = max(dt, 1e-6)
         accel = (vel_curr - vel_prev) / dt
         accel_mag = round(np.linalg.norm(accel), self.precision)
 
-        # If current velocity is near threshold or both previous and current velocities are near zero
-        if abs(vel_curr_mag - self.velocity_threshold) < self.velocity_threshold:
-            return "Stationary"
+        # Check if both velocities are near zero (truly stationary)
         if (
             abs(vel_curr_mag) <= self.velocity_threshold
             and abs(vel_prev_mag) <= self.velocity_threshold
         ):
             return "Stationary"
-        # If acceleration is negligible then it's constant velocity
-        if accel_mag < self.acceleration_threshold:
-            return "Constant Velocity"
-        else:
-            # Determine if accelerating or decelerating based on the dot product between velocity and acceleration
-            # if np.dot(vel_curr, accel) > 0:
-            if vel_curr_mag > vel_prev_mag:
+        
+        # Check if current velocity alone is near zero (stationary)
+        if abs(vel_curr_mag) <= self.velocity_threshold:
+            return "Stationary"
+        
+        vel_change = vel_curr_mag - vel_prev_mag
+        vel_change_threshold = 1e-4  # threshold to filter noise
+        
+        # If acceleration is significant, classify based on velocity change direction
+        if accel_mag >= self.acceleration_threshold:
+            if vel_change > vel_change_threshold:
                 return "Accelerating"
-            else:
+            elif vel_change < -vel_change_threshold:
                 return "Decelerating"
+            else:
+                # Velocity change is negligible but acceleration exists
+                # Check direction using dot product for more accuracy
+                if np.dot(vel_curr, accel) > 0:
+                    return "Accelerating"
+                else:
+                    return "Decelerating"
+        else:
+            # Acceleration is negligible - constant velocity
+            return "Constant Velocity"
 
     def detect_rotational_motion(self, angular_velocity, linear_velocity, radius=1):
         """
@@ -113,16 +126,20 @@ class PhysicsEngine:
         """
         velocity = np.array(velocity)
         acceleration = np.array(acceleration)
-        vel_mag = np.linalg.norm(velocity)
-        accel_mag = np.linalg.norm(acceleration)
+        vel_mag = round(np.linalg.norm(velocity), self.precision)
+        accel_mag = round(np.linalg.norm(acceleration), self.precision)
 
         # expected frictional deceleration
         expected_friction_accel = -friction_coefficient * self.gravity
 
-        # if vel_mag <= self.velocity_threshold:
+        accel_threshold = self.acceleration_threshold
+        if vel_mag <= self.velocity_threshold:
+            # Slightly more lenient when already stationary to align with Stationary detection
+            accel_threshold = self.acceleration_threshold * 1.5
+        
         if (
             vel_mag <= self.velocity_threshold
-            and accel_mag <= self.acceleration_threshold
+            and accel_mag <= accel_threshold
         ):
             return "Friction Stop"
 

@@ -1,8 +1,9 @@
 import numpy as np
+import mujoco
 from collections import deque
 
 from phlop.physics_engine import PhysicsEngine
-
+from phlop.utils import is_cylinder_upright
 
 class PhysicsTaxonomy:
     def __init__(self, objects):
@@ -165,12 +166,17 @@ class PhysicsTaxonomy:
             }
         return None
 
-    def get_rotational_motions(self, angular_velocity, linear_velocity, radius, shape):
+    def get_rotational_motions(self, angular_velocity, linear_velocity, radius, shape, model, data, object_id):
         """
         Detect rotational motion for any shape.
         Returns: Pure Rotation, Rolling Motion, Rolling with Slipping, or None
         """
-        if shape == "ball":
+        if shape == "cylinder":
+            upright = is_cylinder_upright(self.objects, model, data, object_id)
+            if upright:
+                return None
+        
+        if shape in ["ball", "sphere"]:
             rotational_motion = self.physics_engine.detect_rotational_motion(
                 angular_velocity, linear_velocity, radius
             )
@@ -183,7 +189,8 @@ class PhysicsTaxonomy:
         return None
 
     def environmental_interactions(
-        self, cur_velocity, prev_velocity, dt, friction_coefficient, shape=None
+        self, cur_velocity, prev_velocity, dt, friction_coefficient, shape=None,
+        model=None, data=None, object_id=None
     ):
         """
         Detect friction effects.
@@ -192,10 +199,17 @@ class PhysicsTaxonomy:
         - Skip if object is rolling (pure rolling or rolling with slip)
         - Skip if object is pure spinning (no contact friction)
         - Only detect for actual sliding: "Spinning While Sliding"
+        - For cylinders: only detect if cylinder is on its end edge (upright), not on its side
         """
-        # Skip friction detection for rolling or pure spinning
-        if shape in ["ball", "cylinder"]:
+        # Skip friction detection for balls
+        if shape == "ball":
             return None
+        
+        # cylinders, only detect friction if upright (on its end edge)
+        if shape == "cylinder":
+            upright = is_cylinder_upright(self.objects, model, data, object_id)
+            if not upright:
+                return None
 
         cur_velocity = np.array(cur_velocity)
         prev_velocity = np.array(prev_velocity)
@@ -276,19 +290,11 @@ class PhysicsTaxonomy:
             # 3. Rotational motion
             radius = obj.get("dimensions", {}).get("radius", 0.1)
             rotational_motion = self.get_rotational_motions(
-                cur_angular_velocity, cur_velocity, radius, obj.get("shape", "")
+                cur_angular_velocity, cur_velocity, radius, obj.get("shape", ""), model, data, object_id
             )
             if rotational_motion:
                 results[object_id].append(rotational_motion)
-            # # Store rotational state for friction detection logic
-            # rotational_state = None
-            # if rotational_motion:
-            #     rotational_state = rotational_motion["labels"][0]
-            #     self.rotational_state[object_id] = rotational_state
-            #     results[object_id].append(rotational_motion)
-            # else:
-            #     # No rotational motion detected this frame
-            #     self.rotational_state[object_id] = None
+
 
             # 4. Friction effects - ONLY for actual sliding (not rolling/spinning)
             friction_coeff = self.get_friction_coefficients(obj.get("friction", 0.4))[
@@ -300,6 +306,9 @@ class PhysicsTaxonomy:
                 dt,
                 friction_coeff,
                 obj.get("shape", ""),
+                model=model,
+                data=data,
+                object_id=object_id,
                 # rotational_state=self.rotational_state[object_id]
             )
             if friction_event:
