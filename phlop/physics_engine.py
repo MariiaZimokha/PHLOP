@@ -68,16 +68,11 @@ class PhysicsEngine:
 
     def detect_rotational_motion(self, angular_velocity, linear_velocity, radius=1):
         """
+        Returns:
         - None: No significant rotational motion
-        - "Pure Spinning": Rotating in place
-        - "Rolling Motion": v ≈ r·ω (within epsilon)
-        - "Rolling Motion with Slipping": v ≠ r·ω but same direction
-        - "Spinning While Sliding": Angular axis aligned with velocity direction
-
-        Physics basis:
-        - Rolling condition: v = r·ω (within tolerance)
-        - Pure spinning: v ≈ 0, ω > threshold
-        - Spinning while sliding: ω·v / (|ω||v|) ≈ 1
+        - "Pure Rotation": Rotating in place (stationary)
+        - "Rolling Motion": v ≈ r·ω (within epsilon tolerance)
+        - "Rolling Motion with Slipping": v ≠ r·ω but both present
         """
         angular_velocity = np.array(angular_velocity)
         linear_velocity = np.array(linear_velocity)
