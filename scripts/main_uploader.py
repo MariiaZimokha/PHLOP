@@ -466,7 +466,7 @@ def generate_validation_shard(shard_id, start_idx, count, split):
                 "moving_qa_pairs": json.dumps(out_moving["qa_pairs"]),
             }
         )
-        break
+        # break
 
     df = pd.DataFrame(rows)
     df.to_parquet(OUTPUT_DIR / f"{split}_shard_{shard_id:04d}.parquet", index=False)

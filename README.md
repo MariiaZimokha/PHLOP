@@ -27,7 +27,6 @@ physics parameters, taxonomy labels or both).
 |                               |                             | ~~Without Air Resistance~~                       |
 |                               | Rotational Motion           | Pure Spinning                                 |
 |                               |                             | Rolling Motion                                |
-|                               |                             | Rolling Motion                                |
 |                               |                             | Rolling Motion with Slipping                                |
 |                               |                             | Spinning While Sliding                  |
 | **Interaction Events**        | Collisions                  | Elastic Collision                             |
@@ -62,6 +61,7 @@ To reproduce the PHLOP dataset, run the provided generation script:
 python main.py --output_dir generated/ --num_videos 10
 ```
 This script uses controlled randomisation over object shapes, material properties, initial velocities and global scene parameters (camera, lighting, floor) to produce diverse scenes. It will write videos and associated JSON logs to the specified output directory.
+
 
 ### Settings
 Note: https://github.com/google-deepmind/mujoco/blob/main/doc/overview.rst#units-are-unspecified 

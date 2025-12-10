@@ -67,7 +67,7 @@ class Simulation:
             if geom_id not in self.seg_color_map:
                 self.seg_color_map[geom_id] = (
                     [0, 0, 0]
-                    if geom_id == 0 # floor
+                    if geom_id == 0  # floor
                     else np.random.randint(0, 255, size=3).tolist()
                 )
             mask[seg_ids == geom_id] = self.seg_color_map[geom_id]
