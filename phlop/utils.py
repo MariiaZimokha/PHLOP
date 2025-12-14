@@ -210,7 +210,7 @@ def describe_object_unique(
 ) -> str:
     """
     Generates a unique description. If color/shape is not unique among visible objects,
-    adds spatial context or ID.
+    adds spatial context or ID to ensure unambiguous referencing.
     
     Args:
         target_id: The object ID to describe
@@ -227,7 +227,7 @@ def describe_object_unique(
     if not target_obj:
         return target_id
     
-    # Get basic description
+    # Get basic description (e.g., "red cube")
     target_desc = describe_object_basic(target_obj, rgba_to_name_func)
     
     # Check for ambiguity among appeared objects
@@ -242,41 +242,102 @@ def describe_object_unique(
                 confusors.append(obj_id)
     
     if confusors:
-        # Ambiguity detected! Add spatial context or unique ID.
-        # Try to use spatial context from first frame position
+        # Ambiguity detected! Add spatial context or unique identifier.
         spatial_context = None
+        
         if frames:
-            target_pos = None
-            confusor_positions = []
-            
+            # Get positions from first frame (initial positions are most stable for disambiguation)
             first_frame = frames[0]
             target_obj_state = first_frame.get("objects", {}).get(target_id)
+            target_pos = None
             if target_obj_state:
                 target_pos = target_obj_state.get("position", [0, 0, 0])
             
+            confusor_positions = []
             for conf_id in confusors:
                 conf_obj_state = first_frame.get("objects", {}).get(conf_id)
                 if conf_obj_state:
                     conf_pos = conf_obj_state.get("position", [0, 0, 0])
-                    confusor_positions.append((conf_id, conf_pos))
+                    confusor_positions.append(conf_pos)
             
-            # Use x-position to determine left/right
-            if target_pos and confusor_positions:
-                target_x = target_pos[0] if len(target_pos) > 0 else 0
-                # Compare with confusors to determine relative position
-                confusor_x_positions = [pos[0] for _, pos in confusor_positions if len(pos) > 0]
+            if target_pos and confusor_positions and len(target_pos) >= 2:
+                target_x = target_pos[0]
+                target_y = target_pos[1] if len(target_pos) > 1 else 0
+                
+                # Extract x and y coordinates from confusors
+                confusor_x_positions = [pos[0] for pos in confusor_positions if len(pos) > 0]
+                confusor_y_positions = [pos[1] for pos in confusor_positions if len(pos) > 1]
+                
+                # Determine spatial context using quadrant-based approach
                 if confusor_x_positions:
+                    min_confusor_x = min(confusor_x_positions)
+                    max_confusor_x = max(confusor_x_positions)
                     avg_confusor_x = sum(confusor_x_positions) / len(confusor_x_positions)
-                    if target_x < avg_confusor_x - 0.1:  # Threshold to avoid noise
+                    
+                    # Use a threshold to avoid noise (0.15 units)
+                    threshold = 0.15
+                    
+                    # Check if target is clearly to the left or right
+                    if target_x < min_confusor_x - threshold:
                         spatial_context = "on the left"
-                    elif target_x > avg_confusor_x + 0.1:
+                    elif target_x > max_confusor_x + threshold:
                         spatial_context = "on the right"
+                    elif target_x < avg_confusor_x - threshold:
+                        spatial_context = "on the left"
+                    elif target_x > avg_confusor_x + threshold:
+                        spatial_context = "on the right"
+                    
+                    # If x-position is ambiguous, try y-position (front/back)
+                    if not spatial_context and confusor_y_positions:
+                        min_confusor_y = min(confusor_y_positions)
+                        max_confusor_y = max(confusor_y_positions)
+                        avg_confusor_y = sum(confusor_y_positions) / len(confusor_y_positions)
+                        
+                        if target_y < min_confusor_y - threshold:
+                            spatial_context = "in the front"
+                        elif target_y > max_confusor_y + threshold:
+                            spatial_context = "in the back"
+                        elif target_y < avg_confusor_y - threshold:
+                            spatial_context = "in the front"
+                        elif target_y > avg_confusor_y + threshold:
+                            spatial_context = "in the back"
+                    
+                    # If still ambiguous, use quadrant description
+                    if not spatial_context:
+                        # Determine quadrant relative to confusors
+                        if target_x < avg_confusor_x and target_y < avg_confusor_y:
+                            spatial_context = "in the front-left"
+                        elif target_x < avg_confusor_x and target_y >= avg_confusor_y:
+                            spatial_context = "in the back-left"
+                        elif target_x >= avg_confusor_x and target_y < avg_confusor_y:
+                            spatial_context = "in the front-right"
+                        else:
+                            spatial_context = "in the back-right"
         
         if spatial_context:
             return f"the {target_desc} {spatial_context}"
         else:
-            # Fallback to ID suffix (e.g., "Object 0" from "geom_obj0")
-            obj_id_suffix = target_id.split("_")[-1] if "_" in target_id else target_id[-1]
-            return f"{target_desc} (Object {obj_id_suffix})"
+            # Fallback: Extract numeric ID suffix for a more natural description
+            # e.g., "geom_obj0" -> "0", "obj_1" -> "1"
+            obj_id_suffix = target_id
+            if "_" in target_id:
+                parts = target_id.split("_")
+                # Try to find a numeric suffix
+                for part in reversed(parts):
+                    if part.replace("obj", "").isdigit():
+                        obj_id_suffix = part.replace("obj", "")
+                        break
+                else:
+                    obj_id_suffix = parts[-1]
+            elif target_id[-1].isdigit():
+                # Extract trailing digits
+                obj_id_suffix = ""
+                for char in reversed(target_id):
+                    if char.isdigit():
+                        obj_id_suffix = char + obj_id_suffix
+                    else:
+                        break
+            
+            return f"the {target_desc} (Object {obj_id_suffix})"
     
     return f"the {target_desc}"

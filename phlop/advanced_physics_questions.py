@@ -1,8 +1,10 @@
 import json
 import random
+import numpy as np
+from typing import List, Dict, Optional
+from collections import defaultdict
 import matplotlib.colors as mcolors
-from typing import List, Dict, Optional, Tuple
-from phlop.utils import describe_object_unique, rgba_to_name
+from phlop.utils import describe_object_unique
 
 
 class AdvancedPhysicsQuestions:
@@ -11,7 +13,6 @@ class AdvancedPhysicsQuestions:
         self.frames = self.data.get("frames", [])
         self.objects = self.data.get("objects", [])
         self.fps = fps
-
         self.appeared_obj_ids = self._get_appeared_object_ids()
 
     def _load_json(self, path: str) -> Dict:
@@ -19,7 +20,6 @@ class AdvancedPhysicsQuestions:
             return json.load(f)
 
     def _get_appeared_object_ids(self):
-        """Get set of object IDs that actually appear in frames (have visible bounding boxes)."""
         appeared = set()
         for frame in self.frames:
             for obj_id, obj_state in frame.get("objects", {}).items():
@@ -28,11 +28,7 @@ class AdvancedPhysicsQuestions:
                     appeared.add(obj_id)
         return appeared
 
-    def _get_object(self, obj_id: str) -> Optional[Dict]:
-        return next((o for o in self.objects if o.get("id") == obj_id), None)
-
     def _rgba_to_name(self, rgba):
-        """Convert RGBA tuple to closest CSS color name."""
         if not rgba or len(rgba) < 3:
             return "unknown color"
         rgb = tuple(rgba[:3])
@@ -45,6 +41,18 @@ class AdvancedPhysicsQuestions:
                 min_dist = dist
                 best_name = name
         return best_name.replace("grey", "gray")
+
+    def _describe_object_unique(self, obj_id: str) -> str:
+        return describe_object_unique(
+            target_id=obj_id,
+            objects=self.objects,
+            frames=self.frames,
+            appeared_obj_ids=self.appeared_obj_ids,
+            rgba_to_name_func=self._rgba_to_name
+        )
+
+    def _get_object(self, obj_id: str) -> Optional[Dict]:
+        return next((o for o in self.objects if o.get("id") == obj_id), None)
 
     def _describe_object(self, obj_id: str) -> str:
         """Get human-readable description of object."""
@@ -66,18 +74,6 @@ class AdvancedPhysicsQuestions:
             color = "unknown color"
         
         return f"{color} {shape} ({obj_id})"
-
-    def _describe_object_unique(self, target_id: str) -> str:
-        """
-        Generates a unique description using the shared utility function.
-        """
-        return describe_object_unique(
-            target_id=target_id,
-            objects=self.objects,
-            frames=self.frames,
-            appeared_obj_ids=self.appeared_obj_ids,
-            rgba_to_name_func=self._rgba_to_name
-        )
 
     def _get_taxonomy(
         self, obj_data: Dict, category: str = None, subcategory: str = None
@@ -135,6 +131,539 @@ class AdvancedPhysicsQuestions:
         
         percent_loss = 100 * (total_ke_before - total_ke_after) / total_ke_before
         return max(0, percent_loss)
+
+    def generate_collision_geometry_questions(self) -> List[Dict]:
+        """1.3 Collision Geometry & Impact - 1-2 questions"""
+        questions = []
+
+        for i in range(1, len(self.frames) - 1):
+            cur_f = self.frames[i]
+            if not cur_f.get("interactions"):
+                continue
+
+            for g1, g2 in cur_f["interactions"]:
+                obj1 = f"geom_obj{g1 - 1}"
+                obj2 = f"geom_obj{g2 - 1}"
+
+                if obj1 not in self.appeared_obj_ids or obj2 not in self.appeared_obj_ids:
+                    continue
+
+                prev_f = self.frames[i - 1]
+                o1_data = prev_f["objects"].get(obj1, {})
+                o2_data = prev_f["objects"].get(obj2, {})
+
+                v1 = np.array(o1_data.get("velocity", [0, 0, 0]))
+                v2 = np.array(o2_data.get("velocity", [0, 0, 0]))
+                rel_vel = v1 - v2
+                rel_vel_mag = np.linalg.norm(rel_vel)
+
+                if rel_vel_mag < 0.1:
+                    continue
+
+                t = cur_f.get("time", 0)
+                desc1 = self._describe_object_unique(obj1)
+                desc2 = self._describe_object_unique(obj2)
+
+                # Q: Relative velocity magnitude
+                options = [
+                    f"{round(rel_vel_mag, 2):.2f} m/s",
+                    f"{round(rel_vel_mag * 0.7, 2):.2f} m/s",
+                    f"{round(rel_vel_mag * 1.3, 2):.2f} m/s",
+                    f"{round(rel_vel_mag * 0.5, 2):.2f} m/s",
+                ]
+                shuffled = self._shuffle_options(options)
+
+                questions.append({
+                    "question": (
+                        f"At t={t:.2f}s, what was the relative velocity magnitude "
+                        f"between {desc1} and {desc2} just before collision?"
+                    ),
+                    "options": shuffled,
+                    "answer": f"{round(rel_vel_mag, 2):.2f} m/s",
+                    "answer_type": "multiple_choice",
+                    "difficulty": "medium",
+                    "category": "Collision Geometry",
+                    "question_type": "relative_velocity_magnitude",
+                    "rationale": "Relative velocity is calculated as |v1 - v2|.",
+                    "physics_signals": {"relative_velocity": round(rel_vel_mag, 2)},
+                })
+
+                if len(questions) >= 1:
+                    return questions
+
+        return questions
+
+    def generate_post_collision_motion_questions(self) -> List[Dict]:
+        """1.5 Post-Collision Motion - 1-2 questions"""
+        questions = []
+
+        for i in range(1, len(self.frames) - 1):
+            cur_f = self.frames[i]
+            if not cur_f.get("interactions"):
+                continue
+
+            for g1, g2 in cur_f["interactions"]:
+                obj1 = f"geom_obj{g1 - 1}"
+                obj2 = f"geom_obj{g2 - 1}"
+
+                if obj1 not in self.appeared_obj_ids or obj2 not in self.appeared_obj_ids:
+                    continue
+
+                prev_f = self.frames[i - 1]
+                next_f = self.frames[i + 1]
+
+                v1_before = np.array(prev_f["objects"].get(obj1, {}).get("velocity", [0, 0, 0]))
+                v2_before = np.array(prev_f["objects"].get(obj2, {}).get("velocity", [0, 0, 0]))
+                v1_after = np.array(next_f["objects"].get(obj1, {}).get("velocity", [0, 0, 0]))
+                v2_after = np.array(next_f["objects"].get(obj2, {}).get("velocity", [0, 0, 0]))
+
+                speed1_before = np.linalg.norm(v1_before)
+                speed1_after = np.linalg.norm(v1_after)
+                speed2_before = np.linalg.norm(v2_before)
+                speed2_after = np.linalg.norm(v2_after)
+
+                t = cur_f.get("time", 0)
+                desc1 = self._describe_object_unique(obj1)
+                desc2 = self._describe_object_unique(obj2)
+
+                # Q: Direction reversal
+                dot_product = np.dot(v1_before, v1_after)
+                reversed = "Yes" if dot_product < 0 and speed1_before > 0.1 and speed1_after > 0.1 else "No"
+
+                questions.append({
+                    "question": (
+                        f"At t={t:.2f}s, after the collision, did {desc1} "
+                        f"reverse its direction of motion?"
+                    ),
+                    "options": ["Yes", "No"],
+                    "answer": reversed,
+                    "answer_type": "yes_no",
+                    "difficulty": "medium",
+                    "category": "Post-Collision Motion",
+                    "question_type": "direction_reversal",
+                    "rationale": (
+                        "Direction reversal occurs when the velocity vectors point in opposite directions "
+                        "(negative dot product)."
+                    ),
+                    "physics_signals": {
+                        "speed_before": round(speed1_before, 2),
+                        "speed_after": round(speed1_after, 2),
+                    },
+                })
+
+                if len(questions) >= 1:
+                    return questions
+
+        return questions
+
+    def generate_mass_effects_questions(self) -> List[Dict]:
+        """8.1 Mass Effects - 1-2 questions"""
+        questions = []
+
+        obj_masses = {}
+        for obj in self.objects:
+            obj_id = obj["id"]
+            if obj_id in self.appeared_obj_ids:
+                obj_masses[obj_id] = float(obj.get("mass", 1.0))
+
+        if len(obj_masses) < 2:
+            return questions
+
+        sorted_objs = sorted(obj_masses.items(), key=lambda x: x[1], reverse=True)
+        heaviest_id, heaviest_mass = sorted_objs[0]
+        lightest_id, lightest_mass = sorted_objs[-1]
+
+        desc_heavy = self._describe_object_unique(heaviest_id)
+        desc_light = self._describe_object_unique(lightest_id)
+
+        # Q: Mass ratio
+        mass_ratio = round(heaviest_mass / lightest_mass, 2)
+        options = [
+            f"{mass_ratio:.2f}",
+            f"{round(mass_ratio * 0.8, 2):.2f}",
+            f"{round(mass_ratio * 1.2, 2):.2f}",
+            f"{round(mass_ratio * 0.5, 2):.2f}",
+        ]
+        shuffled = self._shuffle_options(options)
+
+        questions.append({
+            "question": (
+                f"What is the mass ratio between {desc_heavy} (heaviest) "
+                f"and {desc_light} (lightest)?"
+            ),
+            "options": shuffled,
+            "answer": f"{mass_ratio:.2f}",
+            "answer_type": "multiple_choice",
+            "difficulty": "medium",
+            "category": "Mass & Density",
+            "question_type": "mass_ratio",
+            "rationale": "Mass ratio = heaviest_mass / lightest_mass.",
+            "physics_signals": {
+                "heaviest_mass": round(heaviest_mass, 2),
+                "lightest_mass": round(lightest_mass, 2),
+                "mass_ratio": mass_ratio,
+            },
+        })
+
+        return questions
+
+    def generate_friction_coefficient_questions(self) -> List[Dict]:
+        """9.1 Friction Coefficient - 1-2 questions"""
+        questions = []
+
+        friction_data = {}
+        for obj in self.objects:
+            obj_id = obj["id"]
+            if obj_id in self.appeared_obj_ids:
+                friction_str = obj.get("friction", "0.4")
+                if isinstance(friction_str, str):
+                    friction_val = float(friction_str.split()[0])
+                else:
+                    friction_val = float(friction_str)
+                friction_data[obj_id] = friction_val
+
+        if len(friction_data) < 2:
+            return questions
+
+        sorted_friction = sorted(friction_data.items(), key=lambda x: x[1], reverse=True)
+        highest_id, highest_friction = sorted_friction[0]
+        lowest_id, lowest_friction = sorted_friction[-1]
+
+        desc_high = self._describe_object_unique(highest_id)
+        desc_low = self._describe_object_unique(lowest_id)
+
+        # Q: Which material has higher friction (and difference)
+        diff = round(highest_friction - lowest_friction, 3)
+        options = [
+            f"{desc_high} (difference: {diff:.3f})",
+            f"{desc_low} (difference: {diff:.3f})",
+            f"{desc_high} (difference: {round(diff * 0.5, 3):.3f})",
+            f"They have equal friction coefficients",
+        ]
+        shuffled = self._shuffle_options(options)
+
+        questions.append({
+            "question": (
+                f"Between {desc_high} and {desc_low}, which has a higher "
+                f"friction coefficient, and by approximately how much?"
+            ),
+            "options": shuffled,
+            "answer": f"{desc_high} (difference: {diff:.3f})",
+            "answer_type": "multiple_choice",
+            "difficulty": "medium",
+            "category": "Material Properties",
+            "question_type": "friction_coefficient_comparison",
+            "rationale": "Friction coefficient is extracted from object properties.",
+            "physics_signals": {
+                "highest_friction": round(highest_friction, 3),
+                "lowest_friction": round(lowest_friction, 3),
+                "difference": diff,
+            },
+        })
+
+        return questions
+
+    def generate_shape_distribution_questions(self) -> List[Dict]:
+        """10.1 Object Shapes - 1-2 questions"""
+        questions = []
+
+        shape_count = defaultdict(int)
+        for obj in self.objects:
+            obj_id = obj["id"]
+            if obj_id in self.appeared_obj_ids:
+                shape = obj.get("geom_type", "unknown")
+                shape_count[shape] += 1
+
+        if not shape_count:
+            return questions
+
+        # Q: Shape distribution
+        shapes_list = ", ".join([f"{count} {shape}(s)" for shape, count in sorted(shape_count.items())])
+        options = [
+            shapes_list,
+            f"{len(self.appeared_obj_ids)} mixed shapes",
+            f"Only {max(shape_count, key=shape_count.get)}'s",
+            "Insufficient data",
+        ]
+        shuffled = self._shuffle_options(options)
+
+        questions.append({
+            "question": (
+                f"What is the distribution of object shapes in the simulation?"
+            ),
+            "options": shuffled,
+            "answer": shapes_list,
+            "answer_type": "multiple_choice",
+            "difficulty": "easy",
+            "category": "Geometry & Shape",
+            "question_type": "shape_distribution",
+            "rationale": "Count the geometric types of all appeared objects.",
+            "physics_signals": {"shape_distribution": dict(shape_count)},
+        })
+
+        return questions
+
+    def generate_velocity_comparison_questions(self) -> List[Dict]:
+        """11.1 Object Comparisons - 1-2 questions"""
+        questions = []
+
+        if len(self.appeared_obj_ids) < 2:
+            return questions
+
+        # Find peak velocities for each object
+        peak_velocities = {}
+        for obj_id in self.appeared_obj_ids:
+            max_speed = 0
+            for frame in self.frames:
+                obj_state = frame.get("objects", {}).get(obj_id)
+                if obj_state:
+                    vel = np.array(obj_state.get("velocity", [0, 0, 0]))
+                    speed = np.linalg.norm(vel)
+                    max_speed = max(max_speed, speed)
+            peak_velocities[obj_id] = max_speed
+
+        sorted_objs = sorted(peak_velocities.items(), key=lambda x: x[1], reverse=True)
+        if len(sorted_objs) < 2:
+            return questions
+
+        fastest_id, fastest_speed = sorted_objs[0]
+        second_id, second_speed = sorted_objs[1]
+
+        desc_fastest = self._describe_object_unique(fastest_id)
+        desc_second = self._describe_object_unique(second_id)
+
+        # Q: Fastest object
+        options = [
+            f"{desc_fastest} ({round(fastest_speed, 2):.2f} m/s)",
+            f"{desc_second} ({round(second_speed, 2):.2f} m/s)",
+            "They moved at equal speeds",
+            "Cannot determine from data",
+        ]
+        shuffled = self._shuffle_options(options)
+
+        questions.append({
+            "question": (
+                f"Which object reached the highest peak velocity during the simulation?"
+            ),
+            "options": shuffled,
+            "answer": f"{desc_fastest} ({round(fastest_speed, 2):.2f} m/s)",
+            "answer_type": "multiple_choice",
+            "difficulty": "medium",
+            "category": "Comparative Questions",
+            "question_type": "fastest_object",
+            "rationale": "Peak velocity is the maximum speed achieved during motion.",
+            "physics_signals": {
+                "fastest_object": fastest_id,
+                "fastest_speed": round(fastest_speed, 2),
+            },
+        })
+
+        return questions
+
+    def generate_velocity_scaling_counterfactual_questions(self) -> List[Dict]:
+        """12.3 Velocity Counterfactuals - 1-2 questions"""
+        questions = []
+
+        for obj_id in self.appeared_obj_ids:
+            # Find sliding event with high initial velocity
+            for i, frame in enumerate(self.frames):
+                obj_state = frame.get("objects", {}).get(obj_id)
+                if not obj_state:
+                    continue
+
+                vel = np.array(obj_state.get("velocity", [0, 0, 0]))
+                speed = np.linalg.norm(vel)
+
+                if speed > 1.0:  # Significant speed
+                    # Check if object eventually stops
+                    total_distance = 0
+                    stopped_frame = None
+                    for j in range(i, min(i + 30, len(self.frames))):
+                        future_frame = self.frames[j]
+                        future_state = future_frame.get("objects", {}).get(obj_id)
+                        if future_state:
+                            future_vel = np.array(future_state.get("velocity", [0, 0, 0]))
+                            future_speed = np.linalg.norm(future_vel)
+                            if future_speed < 0.05:
+                                stopped_frame = j
+                                break
+
+                    if stopped_frame and stopped_frame > i:
+                        desc = self._describe_object_unique(obj_id)
+                        t = frame.get("time", 0)
+
+                        # Q: Velocity scaling (quadratic relationship)
+                        options = [
+                            "4 times farther (quadratic)",
+                            "2 times farther (linear)",
+                            "Same distance (independent)",
+                            "Half the distance",
+                        ]
+                        shuffled = self._shuffle_options(options)
+
+                        questions.append({
+                            "question": (
+                                f"At t={t:.2f}s, {desc} has velocity {speed:.2f} m/s. "
+                                f"If the initial velocity doubled, how much farther would it slide "
+                                f"(assuming same friction)?"
+                            ),
+                            "options": shuffled,
+                            "answer": "4 times farther (quadratic)",
+                            "answer_type": "multiple_choice",
+                            "difficulty": "hard",
+                            "category": "Counterfactual Reasoning",
+                            "question_type": "velocity_scaling",
+                            "rationale": (
+                                "Stopping distance d = v^2/(2*μ*g). If v doubles, d becomes (2v)^2/(2*μ*g) = 4v^2/(2*μ*g) = 4d."
+                            ),
+                            "physics_signals": {
+                                "initial_velocity": round(speed, 2),
+                                "scaling_factor": 4,
+                            },
+                        })
+
+                        if len(questions) >= 1:
+                            return questions
+
+        return questions
+
+    def generate_physics_principle_questions(self) -> List[Dict]:
+        """13.1 Physics Principles - 1-2 questions"""
+        questions = []
+
+        # Q: Newton's Second Law
+        questions.append({
+            "question": (
+                "According to Newton's Second Law (F = m*a), if an object's mass doubles "
+                "but the applied force remains the same, what happens to its acceleration?"
+            ),
+            "options": [
+                "Acceleration halves",
+                "Acceleration doubles",
+                "Acceleration stays the same",
+                "Acceleration becomes zero",
+            ],
+            "answer": "Acceleration halves",
+            "answer_type": "multiple_choice",
+            "difficulty": "medium",
+            "category": "Conceptual Physics",
+            "question_type": "newtons_second_law",
+            "rationale": "From F = m*a, if m doubles and F stays constant, a = F/(2m) = (1/2)*(F/m).",
+            "physics_signals": {"principle": "newtons_second_law"},
+        })
+
+        return questions
+
+    def generate_temporal_sequence_questions(self) -> List[Dict]:
+        questions = []
+
+        if not self.frames or len(self.appeared_obj_ids) < 1:
+            return questions
+
+        # Track events: collisions, motion starts, motion stops
+        events = []
+        seen_descriptions = set()  # Track unique event descriptions to avoid duplicates
+
+        for i, frame in enumerate(self.frames):
+            t = frame.get("time", 0)
+
+            # Collision events
+            if frame.get("interactions"):
+                for g1, g2 in frame["interactions"]:
+                    obj1 = f"geom_obj{g1 - 1}"
+                    obj2 = f"geom_obj{g2 - 1}"
+                    if obj1 in self.appeared_obj_ids and obj2 in self.appeared_obj_ids:
+                        description = f"{self._describe_object_unique(obj1)} collides with {self._describe_object_unique(obj2)}"
+                        # Only add if we haven't seen this exact description before
+                        if description not in seen_descriptions:
+                            seen_descriptions.add(description)
+                            events.append({
+                                "time": t,
+                                "type": "collision",
+                                "obj1": obj1,
+                                "obj2": obj2,
+                                "description": description
+                            })
+
+        if len(events) < 2:
+            return questions
+
+        # Sort events by time
+        events.sort(key=lambda e: e["time"])
+
+        # Get unique event descriptions (up to 3)
+        event_descriptions = [e["description"] for e in events[:3]]
+        
+        # Ensure we have at least 2 unique events
+        if len(event_descriptions) < 2:
+            return questions
+
+        # Create shuffled version for the question
+        shuffled_events = event_descriptions.copy()
+        random.shuffle(shuffled_events)
+
+        # Generate distinct options
+        correct_order = ", ".join(event_descriptions)
+        reversed_order = ", ".join(reversed(event_descriptions))
+        
+        # Generate alternative orders that are different from correct and reversed
+        options = [correct_order, reversed_order]
+        
+        # If we have 3 events, create more permutations
+        if len(event_descriptions) == 3:
+            # Create alternative permutations (middle, first, last) and (last, first, middle)
+            alt1 = ", ".join([event_descriptions[1], event_descriptions[0], event_descriptions[2]])
+            alt2 = ", ".join([event_descriptions[2], event_descriptions[0], event_descriptions[1]])
+            options.extend([alt1, alt2])
+        elif len(event_descriptions) == 2:
+            # For 2 events, we only have 2 possible orders, so add generic alternatives
+            options.append("The events occurred simultaneously")
+            options.append("Cannot determine from data")
+        
+        # Remove duplicates and ensure we have exactly 4 options
+        unique_options = []
+        for opt in options:
+            if opt not in unique_options:
+                unique_options.append(opt)
+        
+        # If we still don't have 4 unique options, add generic ones
+        while len(unique_options) < 4:
+            if "Cannot determine from data" not in unique_options:
+                unique_options.append("Cannot determine from data")
+            elif "The events occurred simultaneously" not in unique_options:
+                unique_options.append("The events occurred simultaneously")
+            else:
+                # Create a random permutation that's different from existing ones
+                random_order = event_descriptions.copy()
+                random.shuffle(random_order)
+                new_option = ", ".join(random_order)
+                if new_option not in unique_options:
+                    unique_options.append(new_option)
+                else:
+                    # If we can't create a unique option, just add a generic one
+                    unique_options.append("Insufficient information to determine order")
+                    break
+
+        # Shuffle options but keep track of the correct answer
+        shuffled_options = unique_options.copy()
+        random.shuffle(shuffled_options)
+
+        questions.append({
+            "question": (
+                f"What is the correct chronological order of the following events: "
+                f"{', '.join(shuffled_events)}"
+            ),
+            "options": shuffled_options,
+            "answer": correct_order,
+            "answer_type": "multiple_choice",
+            "difficulty": "medium",
+            "category": "Temporal Reasoning",
+            "question_type": "event_sequence",
+            "rationale": "Events are ordered by their timestamps in the simulation.",
+            "physics_signals": {"num_events": len(events)},
+        })
+
+        return questions
 
     def generate_causal_questions(self) -> List[Dict]:
         """
@@ -308,7 +837,7 @@ class AdvancedPhysicsQuestions:
                             "category": "Energy Analysis",
                             "question_type": "kinetic_energy_loss",
                             "rationale": (
-                                "For each object, kinetic energy KE = 0.5·m·|v|². "
+                                "For each object, kinetic energy KE = 0.5*m*|v|^2. "
                                 "Compute before and after collision, sum them, then compute the percentage lost."
                             ),
                             "physics_signals": {
@@ -577,6 +1106,15 @@ class AdvancedPhysicsQuestions:
         questions.extend(self.generate_counterfactual_questions())
         questions.extend(self.generate_contradictory_questions())
         questions.extend(self.generate_multihop_questions())
+        questions.extend(self.generate_collision_geometry_questions())
+        questions.extend(self.generate_post_collision_motion_questions())
+        questions.extend(self.generate_mass_effects_questions())
+        questions.extend(self.generate_friction_coefficient_questions())
+        questions.extend(self.generate_shape_distribution_questions())
+        questions.extend(self.generate_velocity_comparison_questions())
+        questions.extend(self.generate_velocity_scaling_counterfactual_questions())
+        questions.extend(self.generate_physics_principle_questions())
+        questions.extend(self.generate_temporal_sequence_questions())
         
         # Remove duplicates by converting to set of JSON strings, then back to list
         seen = set()
