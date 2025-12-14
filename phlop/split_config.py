@@ -1,3 +1,16 @@
+"""
+Split Configuration for Train/Val/Test Sets
+
+This module contains all split-specific configuration including:
+- Object shapes and materials
+- Object count ranges
+- Camera settings (azimuth, elevation, distance, lookat)
+- Collision modes
+- Floor textures
+- Material component indices
+
+All split-specific settings should be defined here, not hardcoded in other modules.
+"""
 # material_components are based in constant.py
 SPLIT_CONFIG = {
     "train": {
@@ -7,6 +20,18 @@ SPLIT_CONFIG = {
         "camera_profile": "broad",
         "collision_modes": ["collision", "sliding", "stationary"],
         "floor_textures": ["checkerboard", "flat"],
+        # Camera settings
+        "camera": {
+            "azimuth_range": (-180, 180),  # Broad azimuth coverage
+            "elevation_range": (-45, -15),  # Moderate elevation
+            "distance_range": (1.0, 2.5),  # Adaptive distance range
+            "lookat_z_range": (0.3, 0.7),  # Lookat height range
+            "limits": {
+                "az_range": (-180, 180),
+                "el_range": (-89, 0),
+                "dist_range": (0.8, 10.0),
+            },
+        },
         # component indices for each property per material
         "material_components": {
             "metal": {
@@ -33,6 +58,18 @@ SPLIT_CONFIG = {
         "camera_profile": "narrow",
         "collision_modes": ["collision", "sliding"],
         "floor_textures": ["flat", "gradient"],
+        # Camera settings
+        "camera": {
+            "azimuth_range": (-90, 90),  # Narrower azimuth - test angle robustness
+            "elevation_range": (-60, -35),  # Steeper elevation - more top-down views
+            "distance_range": (1.0, 2.5),  # Adaptive distance range (pulled back slightly)
+            "lookat_z_range": (0.4, 0.6),  # Lookat height range
+            "limits": {
+                "az_range": (-180, 180),
+                "el_range": (-89, 0),
+                "dist_range": (0.8, 10.0),
+            },
+        },
         "material_components": {
             "metal": {
                 "density_idx": [3, 4, 5],  # copper, zinc, brass
@@ -58,6 +95,18 @@ SPLIT_CONFIG = {
         "camera_profile": "extreme",
         "collision_modes": ["collision", "offset", "sliding"],
         "floor_textures": ["checkerboard", "gradient"],
+        # Camera settings
+        "camera": {
+            "azimuth_range": (-180, 180),  # Full azimuth - test all rotations
+            "elevation_range": (-80, -10),  # Extreme elevation - test extreme angles
+            "distance_range": (1.0, 2.5),  # Adaptive distance range (wide range)
+            "lookat_z_range": (0.2, 0.9),  # Lookat height range
+            "limits": {
+                "az_range": (-180, 180),
+                "el_range": (-89, 0),
+                "dist_range": (0.8, 10.0),
+            },
+        },
         "material_components": {
             "metal": {
                 "density_idx": [6, 7, 8],  # bronze, cast iron, gold

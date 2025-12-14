@@ -8,12 +8,18 @@ from phlop.utils import describe_object_unique
 
 
 class AdvancedPhysicsQuestions:
-    def __init__(self, file_path: str, fps: int = 25):
+    def __init__(self, file_path: str, fps: int = 25, split: str = "train"):
         self.data = self._load_json(file_path)
         self.frames = self.data.get("frames", [])
         self.objects = self.data.get("objects", [])
         self.fps = fps
+        self.split = split  # "train", "val", or "test"
         self.appeared_obj_ids = self._get_appeared_object_ids()
+        
+        # Cache frequently accessed data
+        self._object_descriptions_cache = {}
+        self._object_properties_cache = {}
+        self._peak_velocities_cache = None
 
     def _load_json(self, path: str) -> Dict:
         with open(path, "r") as f:
@@ -43,13 +49,16 @@ class AdvancedPhysicsQuestions:
         return best_name.replace("grey", "gray")
 
     def _describe_object_unique(self, obj_id: str) -> str:
-        return describe_object_unique(
-            target_id=obj_id,
-            objects=self.objects,
-            frames=self.frames,
-            appeared_obj_ids=self.appeared_obj_ids,
-            rgba_to_name_func=self._rgba_to_name
-        )
+        """Get unique object description with caching."""
+        if obj_id not in self._object_descriptions_cache:
+            self._object_descriptions_cache[obj_id] = describe_object_unique(
+                target_id=obj_id,
+                objects=self.objects,
+                frames=self.frames,
+                appeared_obj_ids=self.appeared_obj_ids,
+                rgba_to_name_func=self._rgba_to_name
+            )
+        return self._object_descriptions_cache[obj_id]
 
     def _get_object(self, obj_id: str) -> Optional[Dict]:
         return next((o for o in self.objects if o.get("id") == obj_id), None)
@@ -88,10 +97,139 @@ class AdvancedPhysicsQuestions:
             out.append(tax)
         return out
 
+    def _should_mask_labels(self) -> bool:
+        """Return True if taxonomy labels should be masked (for val/test splits)."""
+        return self.split in ["val", "test"]
+
+    def _get_velocity_from_frame(self, obj_id: str, frame_idx: int) -> np.ndarray:
+        """Get velocity from frame data (for label masking)."""
+        if frame_idx < 0 or frame_idx >= len(self.frames):
+            return np.array([0, 0, 0])
+        frame = self.frames[frame_idx]
+        obj_state = frame.get("objects", {}).get(obj_id, {})
+        return np.array(obj_state.get("velocity", [0, 0, 0]))
+
+    def _infer_motion_state_from_velocity(self, obj_id: str, frame_idx: int) -> Optional[str]:
+        """Infer motion state from velocity data (for label masking)."""
+        if self._should_mask_labels():
+            if frame_idx < 1 or frame_idx >= len(self.frames):
+                return None
+            prev_vel = self._get_velocity_from_frame(obj_id, frame_idx - 1)
+            curr_vel = self._get_velocity_from_frame(obj_id, frame_idx)
+            
+            prev_speed = np.linalg.norm(prev_vel)
+            curr_speed = np.linalg.norm(curr_vel)
+            
+            if prev_speed < 0.05 and curr_speed < 0.05:
+                return "Stationary"
+            elif curr_speed > prev_speed + 0.1:
+                return "Accelerating"
+            elif curr_speed < prev_speed - 0.1:
+                return "Decelerating"
+            elif abs(curr_speed - prev_speed) < 0.1:
+                return "Constant Velocity"
+        return None
+
     def _shuffle_options(self, options: List[str]) -> List[str]:
         shuffled = options.copy()
         random.shuffle(shuffled)
         return shuffled
+
+    def _geom_id_to_obj_id(self, geom_id: int) -> str:
+        """Convert geometry ID to object ID string."""
+        return f"geom_obj{geom_id - 1}"
+
+    def _get_velocity_from_obj_state(self, obj_state: Dict) -> np.ndarray:
+        """Extract velocity vector from object state dictionary."""
+        return np.array(obj_state.get("velocity", [0, 0, 0]))
+
+    def _get_speed_from_velocity(self, velocity) -> float:
+        """Calculate speed (magnitude) from velocity vector."""
+        if isinstance(velocity, (list, tuple)):
+            velocity = np.array(velocity)
+        return np.linalg.norm(velocity)
+
+    def _get_object_properties(self, obj_id: str) -> Optional[Dict]:
+        """Get cached object properties (mass, friction, description)."""
+        if obj_id not in self._object_properties_cache:
+            obj = self._get_object(obj_id)
+            if not obj or obj_id not in self.appeared_obj_ids:
+                return None
+            
+            mass = float(obj.get("mass", 1.0))
+            friction_str = obj.get("friction", "0.4")
+            if isinstance(friction_str, str):
+                friction = float(friction_str.split()[0])
+            else:
+                friction = float(friction_str)
+            
+            self._object_properties_cache[obj_id] = {
+                "mass": mass,
+                "friction": friction,
+                "desc": self._describe_object_unique(obj_id)
+            }
+        return self._object_properties_cache[obj_id]
+
+    def _get_peak_velocities(self) -> Dict[str, float]:
+        """Calculate and cache peak velocities for all objects."""
+        if self._peak_velocities_cache is None:
+            self._peak_velocities_cache = {}
+            for obj_id in self.appeared_obj_ids:
+                max_speed = 0
+                for frame in self.frames:
+                    obj_state = frame.get("objects", {}).get(obj_id)
+                    if obj_state:
+                        vel = self._get_velocity_from_obj_state(obj_state)
+                        speed = self._get_speed_from_velocity(vel)
+                        max_speed = max(max_speed, speed)
+                self._peak_velocities_cache[obj_id] = max_speed
+        return self._peak_velocities_cache
+
+    def _iter_collisions(self):
+        """Generator that yields collision information (frame_idx, obj1_id, obj2_id, frame)."""
+        for i in range(1, len(self.frames) - 1):
+            cur_f = self.frames[i]
+            if not cur_f.get("interactions"):
+                continue
+            
+            for g1, g2 in cur_f["interactions"]:
+                obj1_id = self._geom_id_to_obj_id(g1)
+                obj2_id = self._geom_id_to_obj_id(g2)
+                
+                if obj1_id not in self.appeared_obj_ids or obj2_id not in self.appeared_obj_ids:
+                    continue
+                
+                yield i, obj1_id, obj2_id, cur_f
+
+    def _get_collision_velocities(self, frame_idx: int, obj1_id: str, obj2_id: str) -> Optional[Dict]:
+        """Get velocities before and after collision for both objects."""
+        if frame_idx < 1 or frame_idx >= len(self.frames) - 1:
+            return None
+        
+        prev_f = self.frames[frame_idx - 1]
+        cur_f = self.frames[frame_idx]
+        next_f = self.frames[frame_idx + 1]
+        
+        o1_prev = prev_f.get("objects", {}).get(obj1_id, {})
+        o2_prev = prev_f.get("objects", {}).get(obj2_id, {})
+        o1_next = next_f.get("objects", {}).get(obj1_id, {})
+        o2_next = next_f.get("objects", {}).get(obj2_id, {})
+        
+        return {
+            "v1_before": self._get_velocity_from_obj_state(o1_prev),
+            "v2_before": self._get_velocity_from_obj_state(o2_prev),
+            "v1_after": self._get_velocity_from_obj_state(o1_next),
+            "v2_after": self._get_velocity_from_obj_state(o2_next),
+        }
+
+    def _infer_collision_type_from_energy_loss(self, ke_loss: float) -> tuple:
+        """Infer collision type and answer from energy loss (matching physics_engine.py thresholds)."""
+        if ke_loss < 10:  # ke_ratio > 0.9, energy loss < 10%
+            return "Elastic Collision", "Kinetic energy is conserved; objects bounce apart."
+        elif ke_loss < 50:  # ke_ratio > 0.5, energy loss 10-50%
+            return "Partially Inelastic Collision", "Some kinetic energy is lost, but not all."
+        else:  # ke_ratio <= 0.5, energy loss >= 50%
+            return "Highly Inelastic Collision", "Most kinetic energy is dissipated to heat and sound."
 
     def _calculate_kinetic_energy_loss(self, obj1_id: str, obj2_id: str, collision_frame_idx: int) -> Optional[float]:
         """Calculate percentage of kinetic energy lost during collision."""
@@ -136,35 +274,60 @@ class AdvancedPhysicsQuestions:
         """1.3 Collision Geometry & Impact - 1-2 questions"""
         questions = []
 
-        for i in range(1, len(self.frames) - 1):
-            cur_f = self.frames[i]
-            if not cur_f.get("interactions"):
+        for i, obj1, obj2, cur_f in self._iter_collisions():
+            prev_f = self.frames[i - 1]
+            o1_data = prev_f["objects"].get(obj1, {})
+            o2_data = prev_f["objects"].get(obj2, {})
+
+            v1 = self._get_velocity_from_obj_state(o1_data)
+            v2 = self._get_velocity_from_obj_state(o2_data)
+            rel_vel = v1 - v2
+            rel_vel_mag = self._get_speed_from_velocity(rel_vel)
+
+            if rel_vel_mag < 0.1:
                 continue
 
-            for g1, g2 in cur_f["interactions"]:
-                obj1 = f"geom_obj{g1 - 1}"
-                obj2 = f"geom_obj{g2 - 1}"
+            t = cur_f.get("time", 0)
+            desc1 = self._describe_object_unique(obj1)
+            desc2 = self._describe_object_unique(obj2)
 
-                if obj1 not in self.appeared_obj_ids or obj2 not in self.appeared_obj_ids:
-                    continue
-
-                prev_f = self.frames[i - 1]
-                o1_data = prev_f["objects"].get(obj1, {})
-                o2_data = prev_f["objects"].get(obj2, {})
-
-                v1 = np.array(o1_data.get("velocity", [0, 0, 0]))
-                v2 = np.array(o2_data.get("velocity", [0, 0, 0]))
-                rel_vel = v1 - v2
-                rel_vel_mag = np.linalg.norm(rel_vel)
-
-                if rel_vel_mag < 0.1:
-                    continue
-
-                t = cur_f.get("time", 0)
-                desc1 = self._describe_object_unique(obj1)
-                desc2 = self._describe_object_unique(obj2)
-
-                # Q: Relative velocity magnitude
+            # Convert 30% of numeric questions to decision questions
+            use_decision = random.random() < 0.3
+            
+            if use_decision:
+                    # Decision question: Is relative velocity high enough for highly inelastic collision?
+                    # Note: This threshold is a heuristic for high-energy collisions.
+                    # physics_engine.py uses energy ratio (ke_ratio <= 0.5) to classify highly inelastic collisions,
+                    # not relative velocity. This threshold is used for decision-making questions only.
+                    threshold = 1.5  # m/s - heuristic threshold for high-energy collision decision questions
+                    is_high_energy = rel_vel_mag > threshold
+                    
+                    options = [
+                        "Yes, the relative velocity is high enough to cause a highly inelastic collision.",
+                        "No, the relative velocity is too low for a highly inelastic collision.",
+                        "Relative velocity doesn't affect collision type.",
+                        "Cannot determine from the data provided.",
+                    ]
+                    shuffled = self._shuffle_options(options)
+                    
+                    answer = "Yes, the relative velocity is high enough to cause a highly inelastic collision." if is_high_energy else "No, the relative velocity is too low for a highly inelastic collision."
+                    
+                    questions.append({
+                        "question": (
+                            f"At t={t:.2f}s, was the relative velocity between {desc1} and {desc2} "
+                            f"high enough (above {threshold} m/s) to cause a highly inelastic collision?"
+                        ),
+                        "options": shuffled,
+                        "answer": answer,
+                        "answer_type": "multiple_choice",
+                        "difficulty": "medium",
+                        "category": "Collision Geometry",
+                        "question_type": "relative_velocity_decision",
+                        "rationale": f"Relative velocity magnitude is {round(rel_vel_mag, 2)} m/s. Threshold for high-energy collision is {threshold} m/s.",
+                        "physics_signals": {"relative_velocity": round(rel_vel_mag, 2), "threshold": threshold},
+                    })
+            else:
+                # Original numeric question
                 options = [
                     f"{round(rel_vel_mag, 2):.2f} m/s",
                     f"{round(rel_vel_mag * 0.7, 2):.2f} m/s",
@@ -188,8 +351,8 @@ class AdvancedPhysicsQuestions:
                     "physics_signals": {"relative_velocity": round(rel_vel_mag, 2)},
                 })
 
-                if len(questions) >= 1:
-                    return questions
+            if len(questions) >= 1:
+                return questions
 
         return questions
 
@@ -197,67 +360,53 @@ class AdvancedPhysicsQuestions:
         """1.5 Post-Collision Motion - 1-2 questions"""
         questions = []
 
-        for i in range(1, len(self.frames) - 1):
-            cur_f = self.frames[i]
-            if not cur_f.get("interactions"):
+        for i, obj1, obj2, cur_f in self._iter_collisions():
+            velocities = self._get_collision_velocities(i, obj1, obj2)
+            if not velocities:
                 continue
 
-            for g1, g2 in cur_f["interactions"]:
-                obj1 = f"geom_obj{g1 - 1}"
-                obj2 = f"geom_obj{g2 - 1}"
+            v1_before = velocities["v1_before"]
+            v1_after = velocities["v1_after"]
+            
+            speed1_before = self._get_speed_from_velocity(v1_before)
+            speed1_after = self._get_speed_from_velocity(v1_after)
 
-                if obj1 not in self.appeared_obj_ids or obj2 not in self.appeared_obj_ids:
-                    continue
+            t = cur_f.get("time", 0)
+            desc1 = self._describe_object_unique(obj1)
+            desc2 = self._describe_object_unique(obj2)
 
-                prev_f = self.frames[i - 1]
-                next_f = self.frames[i + 1]
+            # Q: Direction reversal
+            dot_product = np.dot(v1_before, v1_after)
+            reversed = "Yes" if dot_product < 0 and speed1_before > 0.1 and speed1_after > 0.1 else "No"
 
-                v1_before = np.array(prev_f["objects"].get(obj1, {}).get("velocity", [0, 0, 0]))
-                v2_before = np.array(prev_f["objects"].get(obj2, {}).get("velocity", [0, 0, 0]))
-                v1_after = np.array(next_f["objects"].get(obj1, {}).get("velocity", [0, 0, 0]))
-                v2_after = np.array(next_f["objects"].get(obj2, {}).get("velocity", [0, 0, 0]))
+            questions.append({
+                "question": (
+                    f"At t={t:.2f}s, after the collision, did {desc1} "
+                    f"reverse its direction of motion?"
+                ),
+                "options": ["Yes", "No"],
+                "answer": reversed,
+                "answer_type": "yes_no",
+                "difficulty": "medium",
+                "category": "Post-Collision Motion",
+                "question_type": "direction_reversal",
+                "rationale": (
+                    "Direction reversal occurs when the velocity vectors point in opposite directions "
+                    "(negative dot product)."
+                ),
+                "physics_signals": {
+                    "speed_before": round(speed1_before, 2),
+                    "speed_after": round(speed1_after, 2),
+                },
+            })
 
-                speed1_before = np.linalg.norm(v1_before)
-                speed1_after = np.linalg.norm(v1_after)
-                speed2_before = np.linalg.norm(v2_before)
-                speed2_after = np.linalg.norm(v2_after)
-
-                t = cur_f.get("time", 0)
-                desc1 = self._describe_object_unique(obj1)
-                desc2 = self._describe_object_unique(obj2)
-
-                # Q: Direction reversal
-                dot_product = np.dot(v1_before, v1_after)
-                reversed = "Yes" if dot_product < 0 and speed1_before > 0.1 and speed1_after > 0.1 else "No"
-
-                questions.append({
-                    "question": (
-                        f"At t={t:.2f}s, after the collision, did {desc1} "
-                        f"reverse its direction of motion?"
-                    ),
-                    "options": ["Yes", "No"],
-                    "answer": reversed,
-                    "answer_type": "yes_no",
-                    "difficulty": "medium",
-                    "category": "Post-Collision Motion",
-                    "question_type": "direction_reversal",
-                    "rationale": (
-                        "Direction reversal occurs when the velocity vectors point in opposite directions "
-                        "(negative dot product)."
-                    ),
-                    "physics_signals": {
-                        "speed_before": round(speed1_before, 2),
-                        "speed_after": round(speed1_after, 2),
-                    },
-                })
-
-                if len(questions) >= 1:
-                    return questions
+            if len(questions) >= 1:
+                return questions
 
         return questions
 
     def generate_mass_effects_questions(self) -> List[Dict]:
-        """8.1 Mass Effects - 1-2 questions"""
+        """ Mass Effects - 1-2 questions"""
         questions = []
 
         obj_masses = {}
@@ -308,19 +457,14 @@ class AdvancedPhysicsQuestions:
         return questions
 
     def generate_friction_coefficient_questions(self) -> List[Dict]:
-        """9.1 Friction Coefficient - 1-2 questions"""
+        """Friction Coefficient - 1-2 questions"""
         questions = []
 
         friction_data = {}
-        for obj in self.objects:
-            obj_id = obj["id"]
-            if obj_id in self.appeared_obj_ids:
-                friction_str = obj.get("friction", "0.4")
-                if isinstance(friction_str, str):
-                    friction_val = float(friction_str.split()[0])
-                else:
-                    friction_val = float(friction_str)
-                friction_data[obj_id] = friction_val
+        for obj_id in self.appeared_obj_ids:
+            props = self._get_object_properties(obj_id)
+            if props:
+                friction_data[obj_id] = props["friction"]
 
         if len(friction_data) < 2:
             return questions
@@ -364,7 +508,7 @@ class AdvancedPhysicsQuestions:
         return questions
 
     def generate_shape_distribution_questions(self) -> List[Dict]:
-        """10.1 Object Shapes - 1-2 questions"""
+        """ Object Shapes - 1-2 questions"""
         questions = []
 
         shape_count = defaultdict(int)
@@ -404,24 +548,14 @@ class AdvancedPhysicsQuestions:
         return questions
 
     def generate_velocity_comparison_questions(self) -> List[Dict]:
-        """11.1 Object Comparisons - 1-2 questions"""
+        """Object Comparisons - 1-2 questions"""
         questions = []
 
         if len(self.appeared_obj_ids) < 2:
             return questions
 
-        # Find peak velocities for each object
-        peak_velocities = {}
-        for obj_id in self.appeared_obj_ids:
-            max_speed = 0
-            for frame in self.frames:
-                obj_state = frame.get("objects", {}).get(obj_id)
-                if obj_state:
-                    vel = np.array(obj_state.get("velocity", [0, 0, 0]))
-                    speed = np.linalg.norm(vel)
-                    max_speed = max(max_speed, speed)
-            peak_velocities[obj_id] = max_speed
-
+        # Use cached peak velocities
+        peak_velocities = self._get_peak_velocities()
         sorted_objs = sorted(peak_velocities.items(), key=lambda x: x[1], reverse=True)
         if len(sorted_objs) < 2:
             return questions
@@ -461,7 +595,7 @@ class AdvancedPhysicsQuestions:
         return questions
 
     def generate_velocity_scaling_counterfactual_questions(self) -> List[Dict]:
-        """12.3 Velocity Counterfactuals - 1-2 questions"""
+        """Velocity Counterfactuals - 1-2 questions"""
         questions = []
 
         for obj_id in self.appeared_obj_ids:
@@ -471,8 +605,8 @@ class AdvancedPhysicsQuestions:
                 if not obj_state:
                     continue
 
-                vel = np.array(obj_state.get("velocity", [0, 0, 0]))
-                speed = np.linalg.norm(vel)
+                vel = self._get_velocity_from_obj_state(obj_state)
+                speed = self._get_speed_from_velocity(vel)
 
                 if speed > 1.0:  # Significant speed
                     # Check if object eventually stops
@@ -482,8 +616,8 @@ class AdvancedPhysicsQuestions:
                         future_frame = self.frames[j]
                         future_state = future_frame.get("objects", {}).get(obj_id)
                         if future_state:
-                            future_vel = np.array(future_state.get("velocity", [0, 0, 0]))
-                            future_speed = np.linalg.norm(future_vel)
+                            future_vel = self._get_velocity_from_obj_state(future_state)
+                            future_speed = self._get_speed_from_velocity(future_vel)
                             if future_speed < 0.05:
                                 stopped_frame = j
                                 break
@@ -528,7 +662,7 @@ class AdvancedPhysicsQuestions:
         return questions
 
     def generate_physics_principle_questions(self) -> List[Dict]:
-        """13.1 Physics Principles - 1-2 questions"""
+        """Physics Principles - 1-2 questions"""
         questions = []
 
         # Q: Newton's Second Law
@@ -570,8 +704,8 @@ class AdvancedPhysicsQuestions:
             # Collision events
             if frame.get("interactions"):
                 for g1, g2 in frame["interactions"]:
-                    obj1 = f"geom_obj{g1 - 1}"
-                    obj2 = f"geom_obj{g2 - 1}"
+                    obj1 = self._geom_id_to_obj_id(g1)
+                    obj2 = self._geom_id_to_obj_id(g2)
                     if obj1 in self.appeared_obj_ids and obj2 in self.appeared_obj_ids:
                         description = f"{self._describe_object_unique(obj1)} collides with {self._describe_object_unique(obj2)}"
                         # Only add if we haven't seen this exact description before
@@ -682,15 +816,8 @@ class AdvancedPhysicsQuestions:
 
             t = cur_f.get("time", 0)
 
-            for g1, g2 in cur_f["interactions"]:
-                obj1 = f"geom_obj{g1 - 1}"
-                obj2 = f"geom_obj{g2 - 1}"
-
-                # Only process objects that appeared in frames
-                if obj1 not in self.appeared_obj_ids or obj2 not in self.appeared_obj_ids:
-                    continue
-
-                # for traking if the same collision has been processed already
+            for i, obj1, obj2, cur_f in self._iter_collisions():
+                # for tracking if the same collision has been processed already
                 collision_key = (round(t, 3), tuple(sorted([obj1, obj2])))
                 
                 # Skip if already processed
@@ -712,16 +839,20 @@ class AdvancedPhysicsQuestions:
                 collision_type = collision_data.get("labels", [None])[0]
                 energy_analysis = collision_data.get("energy_analysis")
 
-                # Get object descriptions
+                # Get object descriptions (cached)
                 desc1 = self._describe_object_unique(obj1)
                 desc2 = self._describe_object_unique(obj2)
 
                 # Q1: Motion change causation
-                v_prev = prev_f["objects"].get(obj2, {}).get("velocity", [0, 0, 0])
-                v_next = next_f["objects"].get(obj2, {}).get("velocity", [0, 0, 0])
+                velocities = self._get_collision_velocities(i, obj1, obj2)
+                if not velocities:
+                    continue
+                
+                v_prev = velocities["v2_before"]
+                v_next = velocities["v2_after"]
 
-                prev_speed = sum(v * v for v in v_prev) ** 0.5
-                next_speed = sum(v * v for v in v_next) ** 0.5
+                prev_speed = self._get_speed_from_velocity(v_prev)
+                next_speed = self._get_speed_from_velocity(v_next)
 
                 if prev_speed < 0.05 and next_speed > 0.3:
                     options = [
@@ -757,95 +888,182 @@ class AdvancedPhysicsQuestions:
                         }
                     )
 
-                # Q2: Collision type and energy conservation
+                # Q2: Collision type and energy conservation (with split-aware masking)
                 if collision_type:
-                    if "Elastic" in collision_type:
-                        answer = "Kinetic energy is conserved; objects bounce apart."
-                        options = [
-                            "Kinetic energy is conserved; objects bounce apart.",
-                            "All energy is lost to heat and sound.",
-                            "Energy increases during the collision.",
-                            "Energy conservation doesn't apply to collisions.",
-                        ]
-                    elif "Partially Inelastic" in collision_type:
-                        answer = "Some kinetic energy is lost, but not all."
-                        options = [
-                            "Some kinetic energy is lost, but not all.",
-                            "Kinetic energy is completely conserved.",
-                            "All energy is lost to heat and sound.",
-                            "Energy increases during the collision.",
-                        ]
-                    elif "Highly Inelastic" in collision_type:
-                        answer = "Most kinetic energy is dissipated to heat and sound."
-                        options = [
-                            "Most kinetic energy is dissipated to heat and sound.",
-                            "Kinetic energy is completely conserved.",
-                            "Some energy is created during collision.",
-                            "Energy conservation doesn't apply here.",
-                        ]
+                    # For val/test splits, infer collision type from energy loss instead of using label
+                    # Thresholds match physics_engine.py: Elastic (>90% conserved, <10% loss),
+                    # Partially Inelastic (50-90% conserved, 10-50% loss), Highly Inelastic (<=50% conserved, >=50% loss)
+                    if self._should_mask_labels():
+                        ke_loss = self._calculate_kinetic_energy_loss(obj1, obj2, i)
+                        if ke_loss is not None:
+                            # Infer collision type from energy loss (matching physics_engine.py thresholds)
+                            inferred_type, answer = self._infer_collision_type_from_energy_loss(ke_loss)
+                            
+                            options = [
+                                "Kinetic energy is conserved; objects bounce apart.",
+                                "Some kinetic energy is lost, but not all.",
+                                "Most kinetic energy is dissipated to heat and sound.",
+                                "Energy conservation doesn't apply to collisions.",
+                            ]
+                            shuffled_options = self._shuffle_options(options)
+                            
+                            questions.append(
+                                {
+                                    "question": (
+                                        f"At t={t:.2f}s, {desc1} collides with {desc2}. "
+                                        f"Based on the observed energy loss ({round(ke_loss, 1)}%), "
+                                        f"what can we infer about energy conservation?"
+                                    ),
+                                    "options": shuffled_options,
+                                    "answer": answer,
+                                    "answer_type": "multiple_choice",
+                                    "difficulty": "hard",
+                                    "category": "Causal Reasoning",
+                                    "question_type": "energy_analysis",
+                                    "rationale": (
+                                        f"Energy loss of {round(ke_loss, 1)}% indicates a {inferred_type.lower()} collision. "
+                                        f"Energy classification: {energy_analysis}"
+                                    ),
+                                    "physics_signals": {
+                                        "inferred_collision_type": inferred_type,
+                                        "energy_loss": round(ke_loss, 1),
+                                        "energy_analysis": energy_analysis,
+                                    },
+                                }
+                            )
                     else:
-                        continue
+                        # Train split: can use taxonomy labels directly
+                        # Labels match physics_engine.py: "Elastic Collision", "Partially Inelastic Collision", "Highly Inelastic Collision"
+                        if collision_type == "Elastic Collision":
+                            answer = "Kinetic energy is conserved; objects bounce apart."
+                            options = [
+                                "Kinetic energy is conserved; objects bounce apart.",
+                                "All energy is lost to heat and sound.",
+                                "Energy increases during the collision.",
+                                "Energy conservation doesn't apply to collisions.",
+                            ]
+                        elif collision_type == "Partially Inelastic Collision":
+                            answer = "Some kinetic energy is lost, but not all."
+                            options = [
+                                "Some kinetic energy is lost, but not all.",
+                                "Kinetic energy is completely conserved.",
+                                "All energy is lost to heat and sound.",
+                                "Energy increases during the collision.",
+                            ]
+                        elif collision_type == "Highly Inelastic Collision":
+                            answer = "Most kinetic energy is dissipated to heat and sound."
+                            options = [
+                                "Most kinetic energy is dissipated to heat and sound.",
+                                "Kinetic energy is completely conserved.",
+                                "Some energy is created during collision.",
+                                "Energy conservation doesn't apply here.",
+                            ]
+                        else:
+                            continue
 
-                    shuffled_options = self._shuffle_options(options)
-                    
-                    questions.append(
-                        {
-                            "question": (
-                                f"At t={t:.2f}s, {desc1} collides with {desc2}. "
-                                f"The collision is classified as '{collision_type}'. "
-                                f"What does this tell us about energy conservation?"
-                            ),
-                            "options": shuffled_options,
-                            "answer": answer,
-                            "answer_type": "multiple_choice",
-                            "difficulty": "hard",
-                            "category": "Causal Reasoning",
-                            "question_type": "energy_analysis",
-                            "rationale": (
-                                f"Energy classification: {energy_analysis}"
-                            ),
-                            "physics_signals": {
-                                "collision_type": collision_type,
-                                "energy_analysis": energy_analysis,
-                            },
-                        }
-                    )
+                        shuffled_options = self._shuffle_options(options)
+                        
+                        questions.append(
+                            {
+                                "question": (
+                                    f"At t={t:.2f}s, {desc1} collides with {desc2}. "
+                                    f"The collision is classified as '{collision_type}'. "
+                                    f"What does this tell us about energy conservation?"
+                                ),
+                                "options": shuffled_options,
+                                "answer": answer,
+                                "answer_type": "multiple_choice",
+                                "difficulty": "hard",
+                                "category": "Causal Reasoning",
+                                "question_type": "energy_analysis",
+                                "rationale": (
+                                    f"Energy classification: {energy_analysis}"
+                                ),
+                                "physics_signals": {
+                                    "collision_type": collision_type,
+                                    "energy_analysis": energy_analysis,
+                                },
+                            }
+                        )
 
-                # Q3: Kinetic energy loss percentage
+                # Q3: Kinetic energy loss percentage (30% decision, 70% numeric)
                 ke_loss = self._calculate_kinetic_energy_loss(obj1, obj2, i)
                 if ke_loss is not None and ke_loss >= 0:
-                    def make_opts(true_val):
-                        a = round(true_val * 0.8, 1)
-                        b = round(min(true_val + 10, 100), 1)
-                        c = round(abs(true_val - 50), 1)
-                        opts = list({round(true_val, 1), a, b, c})
-                        random.shuffle(opts)
-                        return [f"{v:.1f}%" for v in opts]
+                    use_decision = random.random() < 0.3
                     
-                    options = make_opts(round(ke_loss, 1))
-                    
-                    questions.append(
-                        {
-                            "question": (
-                                f"What percentage of the system's kinetic energy was lost "
-                                f"when the {desc1} collided with the {desc2}?"
-                            ),
-                            "options": options,
-                            "answer": f"{round(ke_loss, 1):.1f}%",
-                            "answer_type": "multiple_choice",
-                            "difficulty": "very_hard",
-                            "category": "Energy Analysis",
-                            "question_type": "kinetic_energy_loss",
-                            "rationale": (
-                                "For each object, kinetic energy KE = 0.5*m*|v|^2. "
-                                "Compute before and after collision, sum them, then compute the percentage lost."
-                            ),
-                            "physics_signals": {
-                                "percent_ke_lost": round(ke_loss, 1),
-                                "collision_type": collision_type,
-                            },
-                        }
-                    )
+                    if use_decision:
+                        # Decision question: Was energy loss significant?
+                        # Threshold matches physics_engine.py: Highly Inelastic = ke_ratio <= 0.5, so energy loss >= 50%
+                        threshold = 50.0  # 50% threshold for highly inelastic collision (matching physics_engine.py)
+                        is_highly_inelastic = ke_loss >= threshold
+                        
+                        options = [
+                            f"Yes, the energy loss ({round(ke_loss, 1)}%) was significant (≥{threshold}%), indicating a highly inelastic collision.",
+                            f"No, the energy loss ({round(ke_loss, 1)}%) was not significant (<{threshold}%), indicating a more elastic collision.",
+                            "Energy loss doesn't determine collision type.",
+                            "Cannot determine from the data provided.",
+                        ]
+                        shuffled = self._shuffle_options(options)
+                        
+                        answer = options[0] if is_highly_inelastic else options[1]
+                        
+                        questions.append(
+                            {
+                                "question": (
+                                    f"When {desc1} collided with {desc2}, was the kinetic energy loss "
+                                    f"significant enough (≥{threshold}%) to classify this as a highly inelastic collision?"
+                                ),
+                                "options": shuffled,
+                                "answer": answer,
+                                "answer_type": "multiple_choice",
+                                "difficulty": "very_hard",
+                                "category": "Energy Analysis",
+                                "question_type": "kinetic_energy_loss_decision",
+                                "rationale": (
+                                    f"Energy loss was {round(ke_loss, 1)}%. "
+                                    f"Threshold for highly inelastic collision is {threshold}% (matching physics_engine.py: ke_ratio <= 0.5)."
+                                ),
+                                "physics_signals": {
+                                    "percent_ke_lost": round(ke_loss, 1),
+                                    "threshold": threshold,
+                                    "collision_type": collision_type,
+                                },
+                            }
+                        )
+                    else:
+                        # Original numeric question
+                        def make_opts(true_val):
+                            a = round(true_val * 0.8, 1)
+                            b = round(min(true_val + 10, 100), 1)
+                            c = round(abs(true_val - 50), 1)
+                            opts = list({round(true_val, 1), a, b, c})
+                            random.shuffle(opts)
+                            return [f"{v:.1f}%" for v in opts]
+                        
+                        options = make_opts(round(ke_loss, 1))
+                        
+                        questions.append(
+                            {
+                                "question": (
+                                    f"What percentage of the system's kinetic energy was lost "
+                                    f"when the {desc1} collided with the {desc2}?"
+                                ),
+                                "options": options,
+                                "answer": f"{round(ke_loss, 1):.1f}%",
+                                "answer_type": "multiple_choice",
+                                "difficulty": "very_hard",
+                                "category": "Energy Analysis",
+                                "question_type": "kinetic_energy_loss",
+                                "rationale": (
+                                    "For each object, kinetic energy KE = 0.5*m*|v|^2. "
+                                    "Compute before and after collision, sum them, then compute the percentage lost."
+                                ),
+                                "physics_signals": {
+                                    "percent_ke_lost": round(ke_loss, 1),
+                                    "collision_type": collision_type,
+                                },
+                            }
+                        )
 
         return questions
 
@@ -922,14 +1140,154 @@ class AdvancedPhysicsQuestions:
 
         return questions
 
+    def generate_property_competition_questions(self) -> List[Dict]:
+        """
+        Property competition questions: pit conflicting properties against each other.
+        Example: "Despite being lighter, why did X travel farther?"
+        """
+        questions = []
+        
+        if len(self.appeared_obj_ids) < 2:
+            return questions
+        
+        # Collect object properties (using cache)
+        obj_properties = {}
+        for obj_id in self.appeared_obj_ids:
+            props = self._get_object_properties(obj_id)
+            if props:
+                obj_properties[obj_id] = props
+        
+        if len(obj_properties) < 2:
+            return questions
+        
+        # Find collisions and track post-collision distances
+        for i in range(1, len(self.frames) - 1):
+            cur_f = self.frames[i]
+            if not cur_f.get("interactions"):
+                continue
+            
+            for g1, g2 in cur_f["interactions"]:
+                obj1_id = self._geom_id_to_obj_id(g1)
+                obj2_id = self._geom_id_to_obj_id(g2)
+                
+                if obj1_id not in obj_properties or obj2_id not in obj_properties:
+                    continue
+                
+                # Calculate post-collision distances traveled
+                post_collision_dist1 = 0
+                post_collision_dist2 = 0
+                
+                # Track positions after collision
+                if i + 1 < len(self.frames):
+                    pos1_start = np.array(cur_f["objects"].get(obj1_id, {}).get("position", [0, 0, 0]))
+                    pos2_start = np.array(cur_f["objects"].get(obj2_id, {}).get("position", [0, 0, 0]))
+                    
+                    # Track for next 20 frames
+                    for j in range(i + 1, min(i + 21, len(self.frames))):
+                        frame = self.frames[j]
+                        pos1_curr = np.array(frame["objects"].get(obj1_id, {}).get("position", [0, 0, 0]))
+                        pos2_curr = np.array(frame["objects"].get(obj2_id, {}).get("position", [0, 0, 0]))
+                        
+                        dist1 = np.linalg.norm(pos1_curr - pos1_start)
+                        dist2 = np.linalg.norm(pos2_curr - pos2_start)
+                        post_collision_dist1 = max(post_collision_dist1, dist1)
+                        post_collision_dist2 = max(post_collision_dist2, dist2)
+                
+                props1 = obj_properties[obj1_id]
+                props2 = obj_properties[obj2_id]
+                
+                # Find property competition scenarios
+                # Scenario 1: Lighter object travels farther despite lower mass
+                if props1["mass"] < props2["mass"] and post_collision_dist1 > post_collision_dist2 * 1.2:
+                    # Check if friction or other properties compensate
+                    if props1["friction"] < props2["friction"]:
+                        options = [
+                            f"Lower friction on {props1['desc']} allowed it to travel farther despite lower mass.",
+                            f"Higher mass on {props2['desc']} caused it to stop sooner.",
+                            "Measurement error in the simulation.",
+                            "Violation of physics laws.",
+                        ]
+                        shuffled = self._shuffle_options(options)
+                        
+                        questions.append({
+                            "question": (
+                                f"After colliding, {props1['desc']} (mass: {props1['mass']:.2f} kg, friction: {props1['friction']:.3f}) "
+                                f"traveled farther than {props2['desc']} (mass: {props2['mass']:.2f} kg, friction: {props2['friction']:.3f}), "
+                                f"despite being lighter. Why did this happen?"
+                            ),
+                            "options": shuffled,
+                            "answer": f"Lower friction on {props1['desc']} allowed it to travel farther despite lower mass.",
+                            "answer_type": "multiple_choice",
+                            "difficulty": "very_hard",
+                            "category": "Property Competition",
+                            "question_type": "property_competition",
+                            "rationale": (
+                                "Multiple properties interact: lower friction compensates for lower mass, "
+                                "allowing the lighter object to travel farther."
+                            ),
+                            "physics_signals": {
+                                "obj1_mass": props1["mass"],
+                                "obj1_friction": props1["friction"],
+                                "obj2_mass": props2["mass"],
+                                "obj2_friction": props2["friction"],
+                                "obj1_distance": round(post_collision_dist1, 2),
+                                "obj2_distance": round(post_collision_dist2, 2),
+                            },
+                        })
+                        return questions
+                
+                # Scenario 2: Higher friction but travels farther (unusual case)
+                elif props1["friction"] > props2["friction"] and post_collision_dist1 > post_collision_dist2 * 1.2:
+                    # This could happen if mass difference is significant
+                    if props1["mass"] > props2["mass"] * 1.5:
+                        options = [
+                            f"Higher mass on {props1['desc']} provided more momentum, overcoming higher friction.",
+                            f"Lower friction on {props2['desc']} caused it to stop sooner.",
+                            "Measurement error in the simulation.",
+                            "Friction doesn't affect post-collision distance.",
+                        ]
+                        shuffled = self._shuffle_options(options)
+                        
+                        questions.append({
+                            "question": (
+                                f"After colliding, {props1['desc']} (mass: {props1['mass']:.2f} kg, friction: {props1['friction']:.3f}) "
+                                f"traveled farther than {props2['desc']} (mass: {props2['mass']:.2f} kg, friction: {props2['friction']:.3f}), "
+                                f"despite having higher friction. Why did this happen?"
+                            ),
+                            "options": shuffled,
+                            "answer": f"Higher mass on {props1['desc']} provided more momentum, overcoming higher friction.",
+                            "answer_type": "multiple_choice",
+                            "difficulty": "very_hard",
+                            "category": "Property Competition",
+                            "question_type": "property_competition",
+                            "rationale": (
+                                "Higher mass provides more momentum (p = mv), which can overcome "
+                                "the retarding effect of higher friction."
+                            ),
+                            "physics_signals": {
+                                "obj1_mass": props1["mass"],
+                                "obj1_friction": props1["friction"],
+                                "obj2_mass": props2["mass"],
+                                "obj2_friction": props2["friction"],
+                                "obj1_distance": round(post_collision_dist1, 2),
+                                "obj2_distance": round(post_collision_dist2, 2),
+                            },
+                        })
+                        return questions
+        
+        return questions
+
     def generate_contradictory_questions(self) -> List[Dict]:
         """
         Conceptual contradiction checks derived from kinematic taxonomy.
+        Expanded to include temporal consistency and label vs observation mismatches.
         """
         questions = []
         found_contradictions = {
             "stationary_spinning": False,
             "rolling_slipping": False,
+            "temporal_consistency": False,
+            "label_observation_mismatch": False,
         }
 
         for frame in self.frames:
@@ -1021,7 +1379,135 @@ class AdvancedPhysicsQuestions:
                             }
                         )
 
-                # Early exit if both contradictions found
+                # Contradiction 3: Temporal consistency - Stationary and Accelerating in adjacent frames
+                if not found_contradictions["temporal_consistency"]:
+                    # Check current and next frame
+                    frame_idx = self.frames.index(frame)
+                    if frame_idx < len(self.frames) - 1:
+                        next_frame = self.frames[frame_idx + 1]
+                        next_obj_state = next_frame.get("objects", {}).get(obj_id)
+                        
+                        if next_obj_state:
+                            next_labels = [
+                                l
+                                for tax in next_obj_state.get("taxonomy", [])
+                                for l in tax.get("labels", [])
+                            ]
+                            
+                            # Check for contradictory labels across frames
+                            if "Stationary" in labels and "Accelerating" in next_labels:
+                                found_contradictions["temporal_consistency"] = True
+                                
+                                obj_desc = self._describe_object_unique(obj_id)
+                                next_t = next_frame.get("time", 0)
+                                
+                                # For test/val splits, mask labels and use velocity inference
+                                if self._should_mask_labels():
+                                    inferred_state_curr = self._infer_motion_state_from_velocity(obj_id, frame_idx)
+                                    inferred_state_next = self._infer_motion_state_from_velocity(obj_id, frame_idx + 1)
+                                    
+                                    if inferred_state_curr == "Stationary" and inferred_state_next == "Accelerating":
+                                        options = [
+                                            "Yes, this is consistent - an object can transition from stationary to accelerating.",
+                                            "No, this is inconsistent - stationary objects cannot accelerate.",
+                                            "Only if an external force is applied.",
+                                            "This violates conservation of energy.",
+                                        ]
+                                        curr_vel = self._get_velocity_from_obj_state(obj_state)
+                                        next_vel = self._get_velocity_from_obj_state(next_obj_state)
+                                        question_text = (
+                                            f"At t={t:.2f}s, {obj_desc} has velocity magnitude {self._get_speed_from_velocity(curr_vel):.2f} m/s. "
+                                            f"At t={next_t:.2f}s, its velocity magnitude is {self._get_speed_from_velocity(next_vel):.2f} m/s. "
+                                            f"Is this transition from stationary to accelerating physically consistent?"
+                                        )
+                                else:
+                                    options = [
+                                        "Yes, this is consistent - an object can transition from stationary to accelerating.",
+                                        "No, this is inconsistent - stationary objects cannot accelerate.",
+                                        "Only if an external force is applied.",
+                                        "This violates conservation of energy.",
+                                    ]
+                                    question_text = (
+                                        f"At t={t:.2f}s, {obj_desc} is labeled as 'Stationary'. "
+                                        f"At t={next_t:.2f}s, it is labeled as 'Accelerating'. "
+                                        f"Is this transition consistent?"
+                                    )
+                                
+                                shuffled_options = self._shuffle_options(options)
+                                
+                                questions.append({
+                                    "question": question_text,
+                                    "options": shuffled_options,
+                                    "answer": "Yes, this is consistent - an object can transition from stationary to accelerating.",
+                                    "answer_type": "multiple_choice",
+                                    "difficulty": "hard",
+                                    "category": "Conceptual Physics",
+                                    "question_type": "temporal_consistency",
+                                    "rationale": (
+                                        "An object can transition from stationary to accelerating when a force is applied. "
+                                        "This is consistent with Newton's laws."
+                                    ),
+                                    "physics_signals": {
+                                        "frame1_time": t,
+                                        "frame2_time": next_t,
+                                        "transition": "Stationary → Accelerating",
+                                    },
+                                })
+                
+                # Contradiction 4: Label vs observation mismatch
+                if not found_contradictions["label_observation_mismatch"]:
+                    # Check if object is labeled as "Accelerating" but velocity magnitude decreases
+                    if "Accelerating" in labels:
+                        vel = self._get_velocity_from_obj_state(obj_state)
+                        vel_mag = self._get_speed_from_velocity(vel)
+                        
+                        # Check previous frame velocity
+                        frame_idx = self.frames.index(frame)
+                        if frame_idx > 0:
+                            prev_frame = self.frames[frame_idx - 1]
+                            prev_obj_state = prev_frame.get("objects", {}).get(obj_id)
+                            if prev_obj_state:
+                                prev_vel = self._get_velocity_from_obj_state(prev_obj_state)
+                                prev_vel_mag = self._get_speed_from_velocity(prev_vel)
+                                
+                                # Velocity magnitude decreased but labeled as accelerating
+                                if prev_vel_mag > vel_mag + 0.1:  # Significant decrease
+                                    found_contradictions["label_observation_mismatch"] = True
+                                    
+                                    obj_desc = self._describe_object_unique(obj_id)
+                                    
+                                    options = [
+                                        "Yes, this is possible - acceleration is a vector; speed can decrease while accelerating.",
+                                        "No, this is inconsistent - accelerating means speed must increase.",
+                                        "Only in non-inertial reference frames.",
+                                        "This violates Newton's laws.",
+                                    ]
+                                    shuffled_options = self._shuffle_options(options)
+                                    
+                                    questions.append({
+                                        "question": (
+                                            f"At t={t:.2f}s, {obj_desc} is labeled as 'Accelerating', but its velocity magnitude "
+                                            f"decreased from {prev_vel_mag:.2f} m/s to {vel_mag:.2f} m/s. Is this possible?"
+                                        ),
+                                        "options": shuffled_options,
+                                        "answer": "Yes, this is possible - acceleration is a vector; speed can decrease while accelerating.",
+                                        "answer_type": "multiple_choice",
+                                        "difficulty": "hard",
+                                        "category": "Conceptual Physics",
+                                        "question_type": "label_observation_mismatch",
+                                        "rationale": (
+                                            "Acceleration is a vector quantity. An object can be accelerating "
+                                            "in a direction opposite to its velocity, causing speed to decrease "
+                                            "(e.g., deceleration is negative acceleration)."
+                                        ),
+                                        "physics_signals": {
+                                            "prev_velocity_mag": round(prev_vel_mag, 2),
+                                            "curr_velocity_mag": round(vel_mag, 2),
+                                            "label": "Accelerating",
+                                        },
+                                    })
+
+                # Early exit if all contradictions found
                 if all(found_contradictions.values()):
                     break
 
@@ -1032,32 +1518,106 @@ class AdvancedPhysicsQuestions:
 
     def generate_multihop_questions(self) -> List[Dict]:
         """
-        Multi-step causal chains: A → B → C.
+        Multi-step causal chains: A → B → C and A → B → C → D.
         """
         questions = []
 
+        # Try to find 4-hop chain first (A → B → C → D)
         for i, frame in enumerate(self.frames):
             if not frame.get("interactions"):
-                continue
-
-            if not frame["interactions"]:
                 continue
 
             g1, g2 = frame["interactions"][0]
             a = f"geom_obj{g1 - 1}"
             b = f"geom_obj{g2 - 1}"
 
-            # Only process objects that appeared in frames
+            if a not in self.appeared_obj_ids or b not in self.appeared_obj_ids:
+                continue
+
+            # Find B → C collision
+            for j in range(i + 1, min(i + 15, len(self.frames))):
+                future_frame = self.frames[j]
+                if not future_frame.get("interactions"):
+                    continue
+                
+                for fg1, fg2 in future_frame.get("interactions", []):
+                    ids = [self._geom_id_to_obj_id(fg1), self._geom_id_to_obj_id(fg2)]
+                    if b in ids:
+                        c = ids[0] if ids[1] == b else ids[1]
+                        
+                        if c not in self.appeared_obj_ids:
+                            continue
+                        
+                        # Find C → D collision
+                        for k in range(j + 1, min(j + 15, len(self.frames))):
+                            future_frame2 = self.frames[k]
+                            if not future_frame2.get("interactions"):
+                                continue
+                            
+                            for fg3, fg4 in future_frame2.get("interactions", []):
+                                ids2 = [self._geom_id_to_obj_id(fg3), self._geom_id_to_obj_id(fg4)]
+                                if c in ids2:
+                                    d = ids2[0] if ids2[1] == c else ids2[1]
+                                    
+                                    if d not in self.appeared_obj_ids:
+                                        continue
+                                    
+                                    # Found 4-hop chain: A → B → C → D
+                                    desc_a = self._describe_object_unique(a)
+                                    desc_b = self._describe_object_unique(b)
+                                    desc_c = self._describe_object_unique(c)
+                                    desc_d = self._describe_object_unique(d)
+                                    
+                                    options = [
+                                        "Yes, through a chain of momentum transfers: A→B→C→D.",
+                                        "Partially, but the chain is too long to establish direct causation.",
+                                        "No, each collision is independent.",
+                                        "Only if all objects have the same mass.",
+                                    ]
+                                    shuffled_options = self._shuffle_options(options)
+                                    
+                                    questions.append({
+                                        "question": (
+                                            f"{desc_a} hits {desc_b}. Then {desc_b} hits {desc_c}. "
+                                            f"Finally, {desc_c} hits {desc_d}. "
+                                            f"Is {desc_a} indirectly responsible for the collision between {desc_c} and {desc_d}?"
+                                        ),
+                                        "options": shuffled_options,
+                                        "answer": "Yes, through a chain of momentum transfers: A→B→C→D.",
+                                        "answer_type": "multiple_choice",
+                                        "difficulty": "very_hard",
+                                        "category": "Multi-Hop Reasoning",
+                                        "question_type": "four_hop_causation",
+                                        "rationale": (
+                                            "Momentum transfers through the chain: A imparts momentum to B, "
+                                            "B to C, and C to D. While each transfer reduces the causal link, "
+                                            "the initial collision (A→B) is still part of the causal chain."
+                                        ),
+                                        "physics_signals": {
+                                            "chain": [a, b, c, d],
+                                            "chain_length": 4,
+                                        },
+                                    })
+                                    return questions
+
+        # Fallback to 3-hop chain (A → B → C) if 4-hop not found
+        for i, frame in enumerate(self.frames):
+            if not frame.get("interactions"):
+                continue
+
+            g1, g2 = frame["interactions"][0]
+            a = f"geom_obj{g1 - 1}"
+            b = f"geom_obj{g2 - 1}"
+
             if a not in self.appeared_obj_ids or b not in self.appeared_obj_ids:
                 continue
 
             for future in self.frames[i + 1 : i + 10]:
                 for fg1, fg2 in future.get("interactions", []):
-                    ids = [f"geom_obj{fg1 - 1}", f"geom_obj{fg2 - 1}"]
+                    ids = [self._geom_id_to_obj_id(fg1), self._geom_id_to_obj_id(fg2)]
                     if b in ids:
                         c = ids[0] if ids[1] == b else ids[1]
 
-                        # Only process objects that appeared in frames
                         if c not in self.appeared_obj_ids:
                             continue
 
@@ -1091,6 +1651,7 @@ class AdvancedPhysicsQuestions:
                                 ),
                                 "physics_signals": {
                                     "chain": [a, b, c],
+                                    "chain_length": 3,
                                 },
                             }
                         )
@@ -1106,6 +1667,7 @@ class AdvancedPhysicsQuestions:
         questions.extend(self.generate_counterfactual_questions())
         questions.extend(self.generate_contradictory_questions())
         questions.extend(self.generate_multihop_questions())
+        questions.extend(self.generate_property_competition_questions())
         questions.extend(self.generate_collision_geometry_questions())
         questions.extend(self.generate_post_collision_motion_questions())
         questions.extend(self.generate_mass_effects_questions())

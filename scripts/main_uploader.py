@@ -178,50 +178,28 @@ def calculate_adaptive_distance(elevation_angle, angle_range, distance_range):
 def sample_camera_for_split(split: str, mode: str = "static"):
     """
     Returns split-specific camera config with ADAPTIVE distance based on elevation.
+    All camera settings are read from SPLIT_CONFIG.
 
     The distance automatically adjusts based on the elevation angle:
     - Steep angles (top-down): Camera moves closer for better framing
     - Shallow angles (near horizon): Camera moves back for wider view
-
-    TRAIN:
-        - Broad azimuth (-180 to 180)
-        - Moderate elevation (-45 to -15)
-        - Adaptive distance (1.5 to 3.0m)
-
-    VAL:
-        - Narrower azimuth (-90 to 90) - test angle robustness
-        - Steeper elevation (-60 to -35) - more top-down views
-        - Adaptive distance (2.5 to 4.0m) - pulled back slightly
-
-    TEST:
-        - Full azimuth (-180 to 180) - test all rotations
-        - Extreme elevation (-80 to -10) - test extreme angles
-        - Adaptive distance (1.5 to 4.5m) - wide range, but adaptive prevents "too far"
     """
-
-    if split == "train":
-        az = random.uniform(-180, 180)
-        elev = random.uniform(-45, -15)
-        angle_range = (-45, -15)
-        distance_range = (1.0, 2.5)
-        lookat_z = random.uniform(0.3, 0.7)
-
-    elif split == "val":
-        az = random.uniform(-90, 90)
-        elev = random.uniform(-60, -35)
-        angle_range = (-60, -35)
-        # distance_range = (.5, 3.0)
-        distance_range = (1.0, 2.5)
-        lookat_z = random.uniform(0.4, 0.6)
-
-    else:  # test
-        az = random.uniform(-180, 180)
-        elev = random.uniform(-80, -10)
-        angle_range = (-80, -10)
-        # distance_range = (1.5, 3.0)
-        distance_range = (1.0, 2.5)
-        lookat_z = random.uniform(0.2, 0.9)
-
+    camera_cfg = SPLIT_CONFIG[split]["camera"]
+    
+    # Get ranges from split config
+    az_min, az_max = camera_cfg["azimuth_range"]
+    elev_min, elev_max = camera_cfg["elevation_range"]
+    distance_range = camera_cfg["distance_range"]
+    lookat_z_min, lookat_z_max = camera_cfg["lookat_z_range"]
+    limits = camera_cfg["limits"]
+    
+    # Sample random values within ranges
+    az = random.uniform(az_min, az_max)
+    elev = random.uniform(elev_min, elev_max)
+    lookat_z = random.uniform(lookat_z_min, lookat_z_max)
+    
+    # Calculate adaptive distance based on elevation
+    angle_range = (elev_min, elev_max)
     dist = calculate_adaptive_distance(elev, angle_range, distance_range)
 
     lookat = [random.uniform(-0.5, 0.5), random.uniform(-0.5, 0.5), lookat_z]
@@ -236,11 +214,7 @@ def sample_camera_for_split(split: str, mode: str = "static"):
             "elevation": elev,
             "distance": dist,
         },
-        "limits": {
-            "az_range": (-180, 180),
-            "el_range": (-89, 0),
-            "dist_range": (0.8, 10.0),
-        },
+        "limits": limits,
         "follow": "none" if mode == "static" else "fastest",
     }
 
@@ -277,6 +251,7 @@ def run_single_simulation(
     floor=None,
     lights=None,
     object_specs=None,
+    split: str = "train",
 ):
     if scene_dir.exists():
         for p in scene_dir.glob("*"):
@@ -312,7 +287,7 @@ def run_single_simulation(
     # --- ATOMIC QA WRITE ---
     qa_json_path = scene_dir / "qa.json"
     qa_pairs = QuestionAnswers(file_path).get_questions_answers()
-    advanced_qa_pairs = AdvancedPhysicsQuestions(file_path).generate_all_advanced_questions()
+    advanced_qa_pairs = AdvancedPhysicsQuestions(file_path, split=split).generate_all_advanced_questions()
     qa_pairs = qa_pairs + advanced_qa_pairs
     atomic_write_json(qa_pairs, qa_json_path)
 
@@ -341,7 +316,8 @@ def generate_training_shard(shard_id, start_idx, count):
         cam_mode = cam_modes[i]
 
         scene_path = OUTPUT_DIR / f"train_{global_idx}"
-        num_objects = random.randint(2, 6)
+        obj_count_min, obj_count_max = SPLIT_CONFIG["train"]["object_count"]
+        num_objects = random.randint(obj_count_min, obj_count_max)
         object_specs = build_object_specs(SPLIT_CONFIG["train"], num_objects)
         # print(object_specs)
         # camera_cfg = sample_camera("train", cam_mode)
@@ -356,6 +332,7 @@ def generate_training_shard(shard_id, start_idx, count):
             scene_dir=scene_path,
             camera_cfg=camera_cfg,
             object_specs=object_specs,
+            split="train",
         )
         # print("out ", out)
         rows.append(
@@ -404,7 +381,8 @@ def generate_validation_shard(shard_id, start_idx, count, split):
         base_scene_path = OUTPUT_DIR / f"{split}_{global_idx}"
         base_scene_path.mkdir(parents=True, exist_ok=True)
 
-        num_objects = random.randint(2, 6)
+        obj_count_min, obj_count_max = SPLIT_CONFIG[split]["object_count"]
+        num_objects = random.randint(obj_count_min, obj_count_max)
         # camera_cfg = sample_camera(split, "static")
         camera_cfg = sample_camera_for_split(split=split, mode="static")
 
@@ -417,6 +395,7 @@ def generate_validation_shard(shard_id, start_idx, count, split):
             framerate=FPS,
             scene_dir=base_scene_path / "static",
             camera_cfg=camera_cfg,
+            split=split,
         )
 
         meta = json.load(open(base_scene_path / "static" / "meta.json"))
@@ -446,6 +425,7 @@ def generate_validation_shard(shard_id, start_idx, count, split):
             objects=objects,
             floor=floor,
             lights=lights,
+            split=split,
         )
 
         # dynamic_video_path = scene_path / "simulation_objects_dynamic.mp4"
