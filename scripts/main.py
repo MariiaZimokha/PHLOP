@@ -4,12 +4,12 @@ import random
 from tqdm import tqdm
 
 
-from dataset.question_answer import QuestionAnswers
-from dataset.world.object import Object
-from dataset.annotator import Annotator
-from dataset.video_annotation_visualizer import VideoAnnotationVisualizer
-from dataset.simulator import Simulation
-from dataset.utils import save_file
+from phlop.question_answer import QuestionAnswers
+from phlop.world.object import Object
+from phlop.annotator import Annotator
+from phlop.video_annotation_visualizer import VideoAnnotationVisualizer
+from phlop.simulator import Simulation
+from phlop.utils import save_file
 
 
 def generate_dataset(

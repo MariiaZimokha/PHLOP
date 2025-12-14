@@ -81,41 +81,14 @@ class Annotator:
 
             current_lin_speed = np.linalg.norm(velocity)
             self.vel_history[object_id].append(current_lin_speed)
-
-            # Object is stopped ONLY if ALL recent speeds are below threshold
-            # This filters out collision jitters
-            is_stable_stop = all(
-                v < STOP_LIN_SPEED_THRESHOLD for v in self.vel_history[object_id]
-            )
-
-            # We also ensure the history is full (don't stop on frame 1)
-            is_stopped = (
-                is_stable_stop and len(self.vel_history[object_id]) == self.history_len
-            )
-            # # Stopped detection
-            # speed_lin = np.linalg.norm(velocity)
-            # speed_ang = np.linalg.norm(angular_velocity)
-            # is_stopped = (
-            #     speed_lin < STOP_LIN_SPEED_THRESHOLD
-            #     and speed_ang < STOP_ANG_SPEED_THRESHOLD
-            # )
-            if is_stopped:
-                active_labels.append("Stopped")
-
             quat = data.qpos[adr + 3 : adr + 7]
             rot_mat = np.zeros((3, 3))
             mujoco.mju_quat2Mat(rot_mat.ravel(), quat)
 
-            dot_val = np.clip(np.dot(rot_mat[:, 2], [0, 0, 1]), -1.0, 1.0)
-            tilt_deg = np.degrees(np.arccos(dot_val))
-            is_tipped = tilt_deg > TIP_ANGLE_THRESHOLD_DEG
-            if is_tipped:
-                active_labels.append("Tipped")
 
             frame_annotation["objects"][object_id] = {
                 "velocity": velocity,
                 "angular_velocity": angular_velocity,
-                "active_labels": active_labels,
                 "position": position,
                 "bbox": bbox,
                 "segment_polygons": [contour.tolist() for contour in seg_polygons],

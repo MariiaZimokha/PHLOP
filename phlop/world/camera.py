@@ -105,6 +105,7 @@ class CameraSettings:
         self.camera.azimuth = float(np.clip(self.camera.azimuth, *self.az_range))
         self.camera.elevation = float(np.clip(self.camera.elevation, *self.el_range))
         self.camera.distance = float(np.clip(self.camera.distance, *self.dist_range))
+        self.orbit_angle = np.radians(self.camera.azimuth)
 
         # smoothing state
         self.prev_camera_lookat = self.camera.lookat.copy()
@@ -227,10 +228,20 @@ class CameraSettings:
 
         # --- 1) Orbit angle ---
         self.orbit_angle += orbit_speed * dt
-        self.camera.azimuth = float(np.degrees(self.orbit_angle))
-
-        # Clamp azimuth
-        self.camera.azimuth = float(np.clip(self.camera.azimuth, *self.az_range))
+        # Normalize orbit_angle periodically to prevent overflow
+        if abs(self.orbit_angle) > 2 * np.pi * 10:
+            self.orbit_angle = self.orbit_angle % (2 * np.pi)
+        
+        azimuth_deg = float(np.degrees(self.orbit_angle))
+        
+        # Normalize azimuth to [-180, 180] range for MuJoCo
+        while azimuth_deg > 180:
+            azimuth_deg -= 360
+        while azimuth_deg < -180:
+            azimuth_deg += 360
+        
+        # Clamp azimuth to allowed range
+        self.camera.azimuth = float(np.clip(azimuth_deg, *self.az_range))
 
         # --- 2) Fixed elevation (downward tilt) ---
         self.camera.elevation = float(np.clip(self.camera.elevation, *self.el_range))

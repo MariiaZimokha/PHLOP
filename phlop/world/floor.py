@@ -1,5 +1,5 @@
 import random
-from dataset.world.constants import FLOOR_TEXTURE
+from phlop.world.constants import FLOOR_TEXTURE
 
 
 class Floor:

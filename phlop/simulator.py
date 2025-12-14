@@ -1,14 +1,14 @@
 import random
-from dataset.taxonomy import PhysicsTaxonomy
+from phlop.taxonomy import PhysicsTaxonomy
 import numpy as np
 import mujoco
 import imageio
 
-from dataset.utils import save_file, set_physics_properties, set_position_and_velocity
-from dataset.world.camera import CameraSettings
-from dataset.world.floor import Floor
-from dataset.world.light import Light
-from dataset.world.constants import MODES
+from phlop.utils import save_file, set_physics_properties, set_position_and_velocity
+from phlop.world.camera import CameraSettings
+from phlop.world.floor import Floor
+from phlop.world.light import Light
+from phlop.world.constants import MODES
 
 
 class Simulation:
@@ -21,6 +21,10 @@ class Simulation:
         self.floor = Floor()
         self.light = Light()
         self.seg_color_map = {}
+
+        # Bidirectional mapping for object tracking
+        self.geom_id_to_obj_id = {}  # geom_id (int) → obj["id"] (str)
+        self.obj_id_to_geom_id = {}  # obj["id"] (str) → geom_id (int)
 
         # XML template
         self.header = f"""
@@ -64,7 +68,7 @@ class Simulation:
                 self.seg_color_map[geom_id] = (
                     [0, 0, 0]
                     if geom_id == 0  # floor
-                    else np.random.randint(0, 255, size=3).tolist()  # random color
+                    else np.random.randint(0, 255, size=3).tolist()
                 )
             mask[seg_ids == geom_id] = self.seg_color_map[geom_id]
         return mask
@@ -79,6 +83,24 @@ class Simulation:
             objects.append(obj)
         return objects
 
+    def _build_objects_from_specs(self, specs):
+        objects = []
+        for spec in specs:
+            obj = self.obj.get_object(
+                shape=spec["shape"],
+                material=spec["material"],
+                density_idx=spec["density_idx"],
+                friction_idx=spec["friction_idx"],
+                elasticity_idx=spec["elasticity_idx"],
+            )
+
+            obj["mode"] = self.__get_mode()
+            obj = set_position_and_velocity(obj)
+            obj = set_physics_properties(obj)
+            objects.append(obj)
+
+        return objects
+
     def __build_assets_and_bodies(self, objects, floor, lights):
         asset_defs = []
         bodies_xml = []
@@ -91,7 +113,7 @@ class Simulation:
             )
             bodies_xml.append(
                 f"""
-                <body name="obj{i}" pos="{obj["init_possition_x"]:.4f} {obj["init_possition_y"]:.4f} {obj["base_z"]:.4f}">
+                <body name="obj{i}" pos="{obj["init_position_x"]:.4f} {obj["init_position_y"]:.4f} {obj["base_z"]:.4f}">
                     <freejoint name="obj{i}_free"/>
                     <geom name="geom_obj{i}" type="{obj["geom_type"]}" size="{obj["size_str"]}" mass="{obj["mass"]}"
                           friction="{obj["friction"]}" material="{mat_name}" group="1"/>
@@ -135,14 +157,11 @@ class Simulation:
         path="",
         floor=None,
         lights=None,
+        object_specs=None,
     ):
-        """
-        camera:
-            mode:
-                0 - static
-                1 - dynamic
-        """
-        if objects is None:
+        if object_specs is not None:
+            objects = self._build_objects_from_specs(object_specs)
+        elif objects is None:
             objects = self.__get_world_objects(num_objects)
         if camera is None:
             camera = {"mode": 0, "init": {}}
@@ -169,7 +188,7 @@ class Simulation:
         model = mujoco.MjModel.from_xml_string(simulation_xml)
         data = mujoco.MjData(model)
 
-        # Configure camera
+        # --- CAMERA SETUP ---
         self.camera_settings.set_model(model, data)
         self.camera_settings.set_init_settings(camera.get("init", None))
 
@@ -204,8 +223,14 @@ class Simulation:
             data.qvel[adr : adr + 6] = [*obj["velocity"], *obj["angular_velocity"]]
 
             geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, f"geom_obj{i}")
+            obj_id = obj.get("id", f"geom_obj{i}")
+
+            # store bidirectional mapping
+            self.geom_id_to_obj_id[geom_id] = obj_id
+            self.obj_id_to_geom_id[obj_id] = geom_id
+
             objects[i]["geom_id"] = geom_id
-            objects[i]["id"] = f"geom_obj{i}"
+            objects[i]["id"] = obj_id
 
         physics = PhysicsTaxonomy(objects)
         prev_frame_data = self._get_obj_data(model, data, objects)
@@ -214,6 +239,7 @@ class Simulation:
         segmentation_frames = []
         annotation_frames = []
         prev_time = data.time
+        frame_count = 0  # Frame counter for timing
 
         # Prepare for rendering
         cam_mode = camera.get("mode", 0)
@@ -233,21 +259,20 @@ class Simulation:
                         dynamic=True,
                     )
 
-                # --- RENDER LOGIC (at framerate) ---
-                if len(normal_frames) < data.time * framerate:
+                # --- Use frame counter instead of floating point comparison ---
+                target_frame = int(data.time * framerate)
+                if frame_count <= target_frame:
                     # 1. Decide which camera to use for rendering
-                    # If moving, use the dynamic object. If static, use the ID (or the object, doesn't matter if static)
-                    # CRITICAL FIX: Use self.camera_settings.camera (the object), NOT cam_id (the int)
                     render_cam = self.camera_settings.camera
 
                     # 2. Render RGB
                     renderer.disable_segmentation_rendering()
-                    renderer.update_scene(data, camera=render_cam)  # <--- FIX HERE
+                    renderer.update_scene(data, camera=render_cam)
                     normal_frames.append(renderer.render())
 
                     # 3. Render Segmentation
                     renderer.enable_segmentation_rendering()
-                    renderer.update_scene(data, camera=render_cam)  # <--- FIX HERE
+                    renderer.update_scene(data, camera=render_cam)
                     seg_frame = renderer.render()
                     segmentation_frames.append(
                         self.__convert_segmentation_to_mask(seg_frame)
@@ -263,8 +288,14 @@ class Simulation:
                     dt_step = current_time - prev_time
                     prev_time = current_time
 
+                    # Pass mapping to physics taxonomy
                     events = physics.get_taxonomy(
-                        model, data, dt_step, prev_frame_data, annotation["objects"]
+                        model,
+                        data,
+                        dt_step,
+                        prev_frame_data,
+                        annotation["objects"],
+                        geom_id_to_obj_id=self.geom_id_to_obj_id,
                     )
 
                     annotation_all = {
@@ -281,6 +312,7 @@ class Simulation:
                     annotation_frames.append(
                         {
                             "time": current_time,
+                            "frame_index": frame_count,
                             "objects": annotation_all,
                             "interactions": pairs,
                         }
@@ -288,6 +320,7 @@ class Simulation:
 
                     # Update previous frame data
                     prev_frame_data = self._get_obj_data(model, data, objects)
+                    frame_count += 1
 
         # Save outputs
         normal_video_filename = f"{path}simulation_objects.mp4"
@@ -305,6 +338,14 @@ class Simulation:
             },
             "objects": objects,
             "frames": annotation_frames,
+            "metadata": {
+                "total_frames": frame_count,
+                "duration": duration,
+                "framerate": framerate,
+                "geom_id_to_obj_id": {
+                    str(k): v for k, v in self.geom_id_to_obj_id.items()
+                },
+            },
         }
         file_path = f"{path}meta.json"
         save_file(file_path, data_export)
