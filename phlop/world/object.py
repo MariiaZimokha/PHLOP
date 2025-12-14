@@ -120,6 +120,9 @@ class Object:
         linear_velocity = (0.20 * np.random.uniform(-1, 1, 3)).tolist()
         angular_velocity = (0.15 * np.random.uniform(-1, 1, 3)).tolist()
 
+#   linear_velocity = (0.10 * np.random.uniform(-1, 1, 3)).tolist()  # Reduced from 0.20 to 0.10
+#         angular_velocity = (0.08 * np.random.uniform(-1, 1, 3)).tolist()  # Reduced from 0.15 to 0.08
+
         return {
             "shape": shape,
             "material": material,

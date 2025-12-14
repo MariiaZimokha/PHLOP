@@ -75,20 +75,22 @@ class PhysicsTaxonomy:
             if not all([vel1_pre, vel2_pre, vel1_post, vel2_post]):
                 continue
 
-            # Classify collision
+            # Retrieve masses BEFORE detecting collision
+            # This ensures collision label aligns with energy_analysis
+            mass1 = next(
+                (o["mass"] for o in self.objects if o["id"] == vel1_id), 1.0
+            )
+            mass2 = next(
+                (o["mass"] for o in self.objects if o["id"] == vel2_id), 1.0
+            )
+
+            # Pass masses (m1, m2) to detect_collision so it uses energy as ground truth
+            # This returns: "Elastic Collision", "Partially Inelastic Collision", or "Highly Inelastic Collision"
             collision_type = self.physics_engine.detect_collision(
-                vel1_pre, vel2_pre, vel1_post, vel2_post, normal
+                vel1_pre, vel2_pre, vel1_post, vel2_post, normal, m1=mass1, m2=mass2
             )
 
             if collision_type:
-                # Get masses
-                mass1 = next(
-                    (o["mass"] for o in self.objects if o["id"] == vel1_id), 1.0
-                )
-                mass2 = next(
-                    (o["mass"] for o in self.objects if o["id"] == vel2_id), 1.0
-                )
-
                 # Compute collision context
                 context = self.physics_engine.compute_collision_context(
                     vel1_pre, vel2_pre, mass1, mass2, normal
@@ -176,7 +178,7 @@ class PhysicsTaxonomy:
             if upright:
                 return None
         
-        if shape in ["ball", "sphere"]:
+        if shape in ["ball", "sphere", "cylinder"]:
             rotational_motion = self.physics_engine.detect_rotational_motion(
                 angular_velocity, linear_velocity, radius
             )
@@ -194,12 +196,7 @@ class PhysicsTaxonomy:
     ):
         """
         Detect friction effects.
-
-        IMPORTANT: Only detect sliding friction, NOT rolling friction.
-        - Skip if object is rolling (pure rolling or rolling with slip)
-        - Skip if object is pure spinning (no contact friction)
-        - Only detect for actual sliding: "Spinning While Sliding"
-        - For cylinders: only detect if cylinder is on its end edge (upright), not on its side
+        Only detect sliding friction, NOT rolling friction.
         """
         # Skip friction detection for balls
         if shape == "ball":
@@ -295,8 +292,7 @@ class PhysicsTaxonomy:
             if rotational_motion:
                 results[object_id].append(rotational_motion)
 
-
-            # 4. Friction effects - ONLY for actual sliding (not rolling/spinning)
+            # 4. Friction effects
             friction_coeff = self.get_friction_coefficients(obj.get("friction", 0.4))[
                 "sliding"
             ]
@@ -308,8 +304,7 @@ class PhysicsTaxonomy:
                 obj.get("shape", ""),
                 model=model,
                 data=data,
-                object_id=object_id,
-                # rotational_state=self.rotational_state[object_id]
+                object_id=object_id
             )
             if friction_event:
                 results[object_id].append(friction_event)

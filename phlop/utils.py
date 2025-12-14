@@ -2,6 +2,7 @@ import random
 import numpy as np
 import json
 import mujoco
+import matplotlib.colors as mcolors
 
 def is_cylinder_upright(objects, model, data, object_id, alignment_threshold=0.7):
         """
@@ -54,23 +55,23 @@ def set_position_and_velocity(obj):
         angle = random.uniform(0, 2 * np.pi)
         x = collision_radius * np.cos(angle)
         y = collision_radius * np.sin(angle)
-        speed = random.uniform(2, 5)
+        speed = random.uniform(2, 3.5)  # Reduced from (2, 5) to (0.5, 1.5) for slower movement
         obj["velocity"] = [
             -speed * np.cos(angle),
             -speed * np.sin(angle),
-            random.uniform(-0.2, 0.2),
+            random.uniform(-0.2, 0.2),  # Reduced from (-0.2, 0.2) to (-0.1, 0.1)
         ]
 
     if obj["mode"] == "sliding":
         r = collision_radius * np.sqrt(random.uniform(0, 1))
         theta = random.uniform(0, 2 * np.pi)
         x, y = r * np.cos(theta), r * np.sin(theta)
-        speed = random.uniform(1, 3)
+        speed = random.uniform(1, 2.5)  # Reduced from (1, 3) to (0.3, 1.0) for slower movement
         phi = random.uniform(0, 2 * np.pi)
         obj["velocity"] = [
             speed * np.cos(phi),
             speed * np.sin(phi),
-            random.uniform(-0.1, 0.1),
+            random.uniform(-0.1, 0.1),  # Reduced from (-0.1, 0.1) to (-0.05, 0.05)
         ]
 
     if obj["mode"] == "stationary":
@@ -83,11 +84,11 @@ def set_position_and_velocity(obj):
         r = random.uniform(1.2, 1.5) * collision_radius
         angle = random.uniform(0, 2 * np.pi)
         x, y = r * np.cos(angle), r * np.sin(angle)
-        speed = random.uniform(1, 2)
+        speed = random.uniform(0.5, 1.5)  # Reduced from (1, 2) to (0.3, 0.8) for slower movement
         obj["velocity"] = [
             -speed * np.cos(angle),
             -speed * np.sin(angle),
-            random.uniform(-0.1, 0.1),
+            random.uniform(-0.1, 0.1),  # Reduced from (-0.1, 0.1) to (-0.05, 0.05)
         ]
     obj["init_position_x"] = x
     obj["init_position_y"] = y
@@ -158,3 +159,124 @@ def save_file(path, data):
         json.dump(data, f, indent=2, default=convert)
 
     # print(f"JSON file created: {path}")
+
+
+def rgba_to_name(rgba):
+    """Convert RGBA tuple/list to closest CSS color name."""
+    if not rgba or len(rgba) < 3:
+        return "unknown color"
+    rgb = tuple(rgba[:3])
+    min_dist = float("inf")
+    best_name = "unknown color"
+    for name, hex_val in mcolors.CSS4_COLORS.items():
+        named_rgb = mcolors.to_rgb(hex_val)
+        dist = sum((c1 - c2) ** 2 for c1, c2 in zip(rgb, named_rgb))
+        if dist < min_dist:
+            min_dist = dist
+            best_name = name
+    return best_name.replace("grey", "gray")
+
+
+def describe_object_basic(obj, rgba_to_name_func=None):
+    """Get basic color+shape description without ID."""
+    if not obj:
+        return "unknown object"
+    
+    shape = obj.get("geom_type", "object")
+    
+    # Try to get color from visual properties
+    rgba_str = obj.get("visual", {}).get("rgba", "")
+    if rgba_str:
+        try:
+            rgba = [float(x) for x in rgba_str.split()]
+            if rgba_to_name_func:
+                color = rgba_to_name_func(rgba)
+            else:
+                color = rgba_to_name(rgba)
+        except (ValueError, AttributeError):
+            color = "unknown color"
+    else:
+        color = "unknown color"
+    
+    return f"{color} {shape}"
+
+
+def describe_object_unique(
+    target_id: str,
+    objects: list,
+    frames: list,
+    appeared_obj_ids: set,
+    rgba_to_name_func=None
+) -> str:
+    """
+    Generates a unique description. If color/shape is not unique among visible objects,
+    adds spatial context or ID.
+    
+    Args:
+        target_id: The object ID to describe
+        objects: List of object dictionaries
+        frames: List of frame dictionaries
+        appeared_obj_ids: Set of object IDs that appeared in frames
+        rgba_to_name_func: Optional function to convert RGBA to color name (for compatibility)
+    
+    Returns:
+        Unique description string like "the red cube" or "the red cube on the left"
+    """
+    # Find target object
+    target_obj = next((o for o in objects if o.get("id") == target_id), None)
+    if not target_obj:
+        return target_id
+    
+    # Get basic description
+    target_desc = describe_object_basic(target_obj, rgba_to_name_func)
+    
+    # Check for ambiguity among appeared objects
+    confusors = []
+    for obj_id in appeared_obj_ids:
+        if obj_id == target_id:
+            continue
+        other_obj = next((o for o in objects if o.get("id") == obj_id), None)
+        if other_obj:
+            other_desc = describe_object_basic(other_obj, rgba_to_name_func)
+            if other_desc == target_desc:
+                confusors.append(obj_id)
+    
+    if confusors:
+        # Ambiguity detected! Add spatial context or unique ID.
+        # Try to use spatial context from first frame position
+        spatial_context = None
+        if frames:
+            target_pos = None
+            confusor_positions = []
+            
+            first_frame = frames[0]
+            target_obj_state = first_frame.get("objects", {}).get(target_id)
+            if target_obj_state:
+                target_pos = target_obj_state.get("position", [0, 0, 0])
+            
+            for conf_id in confusors:
+                conf_obj_state = first_frame.get("objects", {}).get(conf_id)
+                if conf_obj_state:
+                    conf_pos = conf_obj_state.get("position", [0, 0, 0])
+                    confusor_positions.append((conf_id, conf_pos))
+            
+            # Use x-position to determine left/right
+            if target_pos and confusor_positions:
+                target_x = target_pos[0] if len(target_pos) > 0 else 0
+                # Compare with confusors to determine relative position
+                confusor_x_positions = [pos[0] for _, pos in confusor_positions if len(pos) > 0]
+                if confusor_x_positions:
+                    avg_confusor_x = sum(confusor_x_positions) / len(confusor_x_positions)
+                    if target_x < avg_confusor_x - 0.1:  # Threshold to avoid noise
+                        spatial_context = "on the left"
+                    elif target_x > avg_confusor_x + 0.1:
+                        spatial_context = "on the right"
+        
+        if spatial_context:
+            return f"the {target_desc} {spatial_context}"
+        else:
+            # Fallback to ID suffix (e.g., "Object 0" from "geom_obj0")
+            obj_id_suffix = target_id.split("_")[-1] if "_" in target_id else target_id[-1]
+            return f"{target_desc} (Object {obj_id_suffix})"
+    
+    return f"the {target_desc}"

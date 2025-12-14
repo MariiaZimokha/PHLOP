@@ -14,6 +14,7 @@ from phlop.video_annotation_visualizer import VideoAnnotationVisualizer
 from phlop.world.object import Object
 from phlop.annotator import Annotator
 from phlop.question_answer import QuestionAnswers
+from phlop.advanced_physics_questions import AdvancedPhysicsQuestions
 import random
 
 from upload.config import (
@@ -311,6 +312,8 @@ def run_single_simulation(
     # --- ATOMIC QA WRITE ---
     qa_json_path = scene_dir / "qa.json"
     qa_pairs = QuestionAnswers(file_path).get_questions_answers()
+    advanced_qa_pairs = AdvancedPhysicsQuestions(file_path).generate_all_advanced_questions()
+    qa_pairs = qa_pairs + advanced_qa_pairs
     atomic_write_json(qa_pairs, qa_json_path)
 
     return {
@@ -508,7 +511,7 @@ def main():
 
     if split in ["val", "test"]:
         total_count = VAL_COUNT if split == "val" else TEST_COUNT
-        while current_idx < 10:
+        while current_idx < 20:
             # while current_idx < total_count:
             generate_validation_shard(shard_id, current_idx, SHARD_SIZE, split=split)
             current_idx += SHARD_SIZE
