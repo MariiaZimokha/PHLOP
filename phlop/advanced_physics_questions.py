@@ -1396,6 +1396,8 @@ class AdvancedPhysicsQuestions:
                             
                             # Check for contradictory labels across frames
                             if "Stationary" in labels and "Accelerating" in next_labels:
+                                question_text = ""
+                                question_text = []
                                 found_contradictions["temporal_consistency"] = True
                                 
                                 obj_desc = self._describe_object_unique(obj_id)
