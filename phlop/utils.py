@@ -6,51 +6,51 @@ import matplotlib.colors as mcolors
 
 
 def is_cylinder_upright(objects, model, data, object_id):
-        """
-        Returns:
-            True if cylinder is upright, False if on its side or if check fails
-        """
-        if model is None or data is None or object_id is None:
-            return False
-        
-        # find the object index from object_id
-        obj_index = None
-        for i, obj in enumerate(objects):
-            if obj.get("id") == object_id:
-                obj_index = i
-                break
-        
-        if obj_index is None:
-            return False
+    """
+    Returns:
+        True if cylinder is upright, False if on its side or if check fails
+    """
+    if model is None or data is None or object_id is None:
+        return False
 
-        try:
-            geom_name = f"geom_obj{obj_index}"
-            geom_id = mujoco.mj_name2id(
-                model,
-                mujoco.mjtObj.mjOBJ_GEOM,
-                geom_name,
-            )
+    # find the object index from object_id
+    obj_index = None
+    for i, obj in enumerate(objects):
+        if obj.get("id") == object_id:
+            obj_index = i
+            break
 
-            if model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_CYLINDER:
-                return None
+    if obj_index is None:
+        return False
 
-            geom_xmat = data.geom_xmat[geom_id].reshape(3, 3)
-            cylinder_axis = geom_xmat[:, 2]
+    try:
+        geom_name = f"geom_obj{obj_index}"
+        geom_id = mujoco.mj_name2id(
+            model,
+            mujoco.mjtObj.mjOBJ_GEOM,
+            geom_name,
+        )
 
-            world_up = np.array([0, 0, 1])
-            alignment = abs(np.dot(cylinder_axis, world_up))
-
-            radius = model.geom_size[geom_id][0]
-            half_height = model.geom_size[geom_id][1]
-            height = 2.0 * half_height
-
-            aspect_ratio = height / (2.0 * radius)
-
-            # short cylinders needs stricter alignment
-            threshold = 0.95 if aspect_ratio < 0.5 else 0.8
-            return alignment >= threshold
-        except:
+        if model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_CYLINDER:
             return None
+
+        geom_xmat = data.geom_xmat[geom_id].reshape(3, 3)
+        cylinder_axis = geom_xmat[:, 2]
+
+        world_up = np.array([0, 0, 1])
+        alignment = abs(np.dot(cylinder_axis, world_up))
+
+        radius = model.geom_size[geom_id][0]
+        half_height = model.geom_size[geom_id][1]
+        height = 2.0 * half_height
+
+        aspect_ratio = height / (2.0 * radius)
+
+        # short cylinders needs stricter alignment
+        threshold = 0.95 if aspect_ratio < 0.5 else 0.8
+        return alignment >= threshold
+    except:
+        return None
 
 
 def set_position_and_velocity(obj):
@@ -60,23 +60,23 @@ def set_position_and_velocity(obj):
         angle = random.uniform(0, 2 * np.pi)
         x = collision_radius * np.cos(angle)
         y = collision_radius * np.sin(angle)
-        speed = random.uniform(2, 3.5) 
+        speed = random.uniform(2, 3.5)
         obj["velocity"] = [
             -speed * np.cos(angle),
             -speed * np.sin(angle),
-            random.uniform(-0.2, 0.2), 
+            random.uniform(-0.2, 0.2),
         ]
 
     if obj["mode"] == "sliding":
         r = collision_radius * np.sqrt(random.uniform(0, 1))
         theta = random.uniform(0, 2 * np.pi)
         x, y = r * np.cos(theta), r * np.sin(theta)
-        speed = random.uniform(1, 2.5) 
+        speed = random.uniform(1, 2.5)
         phi = random.uniform(0, 2 * np.pi)
         obj["velocity"] = [
             speed * np.cos(phi),
             speed * np.sin(phi),
-            random.uniform(-0.1, 0.1), 
+            random.uniform(-0.1, 0.1),
         ]
 
     if obj["mode"] == "stationary":
@@ -89,7 +89,7 @@ def set_position_and_velocity(obj):
         r = random.uniform(1.2, 1.5) * collision_radius
         angle = random.uniform(0, 2 * np.pi)
         x, y = r * np.cos(angle), r * np.sin(angle)
-        speed = random.uniform(0.5, 1.5)  
+        speed = random.uniform(0.5, 1.5)
         obj["velocity"] = [
             -speed * np.cos(angle),
             -speed * np.sin(angle),
@@ -186,9 +186,9 @@ def describe_object_basic(obj, rgba_to_name_func=None):
     """Get basic color+shape description without ID."""
     if not obj:
         return "unknown object"
-    
+
     shape = obj.get("geom_type", "object")
-    
+
     # Try to get color from visual properties
     rgba_str = obj.get("visual", {}).get("rgba", "")
     if rgba_str:
@@ -202,7 +202,7 @@ def describe_object_basic(obj, rgba_to_name_func=None):
             color = "unknown color"
     else:
         color = "unknown color"
-    
+
     return f"{color} {shape}"
 
 
@@ -211,19 +211,19 @@ def describe_object_unique(
     objects: list,
     frames: list,
     appeared_obj_ids: set,
-    rgba_to_name_func=None
+    rgba_to_name_func=None,
 ) -> str:
     """
-        Unique description string like "the red cube" or "the red cube on the left"
+    Unique description string like "the red cube" or "the red cube on the left"
     """
     # Find target object
     target_obj = next((o for o in objects if o.get("id") == target_id), None)
     if not target_obj:
         return target_id
-    
+
     # Get basic description (e.g., "red cube")
     target_desc = describe_object_basic(target_obj, rgba_to_name_func)
-    
+
     # Check for ambiguity among appeared objects
     confusors = []
     for obj_id in appeared_obj_ids:
@@ -234,11 +234,11 @@ def describe_object_unique(
             other_desc = describe_object_basic(other_obj, rgba_to_name_func)
             if other_desc == target_desc:
                 confusors.append(obj_id)
-    
+
     if confusors:
         # Ambiguity detected! Add spatial context or unique identifier.
         spatial_context = None
-        
+
         if frames:
             # Get positions from first frame (initial positions are most stable for disambiguation)
             first_frame = frames[0]
@@ -246,31 +246,37 @@ def describe_object_unique(
             target_pos = None
             if target_obj_state:
                 target_pos = target_obj_state.get("position", [0, 0, 0])
-            
+
             confusor_positions = []
             for conf_id in confusors:
                 conf_obj_state = first_frame.get("objects", {}).get(conf_id)
                 if conf_obj_state:
                     conf_pos = conf_obj_state.get("position", [0, 0, 0])
                     confusor_positions.append(conf_pos)
-            
+
             if target_pos and confusor_positions and len(target_pos) >= 2:
                 target_x = target_pos[0]
                 target_y = target_pos[1] if len(target_pos) > 1 else 0
-                
+
                 # Extract x and y coordinates from confusors
-                confusor_x_positions = [pos[0] for pos in confusor_positions if len(pos) > 0]
-                confusor_y_positions = [pos[1] for pos in confusor_positions if len(pos) > 1]
-                
+                confusor_x_positions = [
+                    pos[0] for pos in confusor_positions if len(pos) > 0
+                ]
+                confusor_y_positions = [
+                    pos[1] for pos in confusor_positions if len(pos) > 1
+                ]
+
                 # Determine spatial context using quadrant-based approach
                 if confusor_x_positions:
                     min_confusor_x = min(confusor_x_positions)
                     max_confusor_x = max(confusor_x_positions)
-                    avg_confusor_x = sum(confusor_x_positions) / len(confusor_x_positions)
-                    
+                    avg_confusor_x = sum(confusor_x_positions) / len(
+                        confusor_x_positions
+                    )
+
                     # Use a threshold to avoid noise (0.15 units)
                     threshold = 0.15
-                    
+
                     # Check if target is clearly to the left or right
                     if target_x < min_confusor_x - threshold:
                         spatial_context = "on the left"
@@ -280,13 +286,15 @@ def describe_object_unique(
                         spatial_context = "on the left"
                     elif target_x > avg_confusor_x + threshold:
                         spatial_context = "on the right"
-                    
+
                     # If x-position is ambiguous, try y-position (front/back)
                     if not spatial_context and confusor_y_positions:
                         min_confusor_y = min(confusor_y_positions)
                         max_confusor_y = max(confusor_y_positions)
-                        avg_confusor_y = sum(confusor_y_positions) / len(confusor_y_positions)
-                        
+                        avg_confusor_y = sum(confusor_y_positions) / len(
+                            confusor_y_positions
+                        )
+
                         if target_y < min_confusor_y - threshold:
                             spatial_context = "in the front"
                         elif target_y > max_confusor_y + threshold:
@@ -295,7 +303,7 @@ def describe_object_unique(
                             spatial_context = "in the front"
                         elif target_y > avg_confusor_y + threshold:
                             spatial_context = "in the back"
-                    
+
                     # If still ambiguous, use quadrant description
                     if not spatial_context:
                         # Determine quadrant relative to confusors
@@ -307,7 +315,7 @@ def describe_object_unique(
                             spatial_context = "in the front-right"
                         else:
                             spatial_context = "in the back-right"
-        
+
         if spatial_context:
             return f"the {target_desc} {spatial_context}"
         else:
@@ -331,7 +339,7 @@ def describe_object_unique(
                         obj_id_suffix = char + obj_id_suffix
                     else:
                         break
-            
+
             return f"the {target_desc} (Object {obj_id_suffix})"
-    
+
     return f"the {target_desc}"

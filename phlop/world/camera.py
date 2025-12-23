@@ -231,15 +231,15 @@ class CameraSettings:
         # Normalize orbit_angle periodically to prevent overflow
         if abs(self.orbit_angle) > 2 * np.pi * 10:
             self.orbit_angle = self.orbit_angle % (2 * np.pi)
-        
+
         azimuth_deg = float(np.degrees(self.orbit_angle))
-        
+
         # Normalize azimuth to [-180, 180] range for MuJoCo
         while azimuth_deg > 180:
             azimuth_deg -= 360
         while azimuth_deg < -180:
             azimuth_deg += 360
-        
+
         # Clamp azimuth to allowed range
         self.camera.azimuth = float(np.clip(azimuth_deg, *self.az_range))
 

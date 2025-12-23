@@ -85,7 +85,6 @@ class Annotator:
             rot_mat = np.zeros((3, 3))
             mujoco.mju_quat2Mat(rot_mat.ravel(), quat)
 
-
             frame_annotation["objects"][object_id] = {
                 "velocity": velocity,
                 "angular_velocity": angular_velocity,

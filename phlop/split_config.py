@@ -11,6 +11,7 @@ This module contains all split-specific configuration including:
 
 All split-specific settings should be defined here, not hardcoded in other modules.
 """
+
 # material_components are based in constant.py
 SPLIT_CONFIG = {
     "train": {
@@ -62,7 +63,10 @@ SPLIT_CONFIG = {
         "camera": {
             "azimuth_range": (-90, 90),  # Narrower azimuth - test angle robustness
             "elevation_range": (-60, -35),  # Steeper elevation - more top-down views
-            "distance_range": (1.0, 2.5),  # Adaptive distance range (pulled back slightly)
+            "distance_range": (
+                1.0,
+                2.5,
+            ),  # Adaptive distance range (pulled back slightly)
             "lookat_z_range": (0.4, 0.6),  # Lookat height range
             "limits": {
                 "az_range": (-180, 180),

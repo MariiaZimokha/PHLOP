@@ -60,10 +60,12 @@ class QuestionAnswers:
 
             rgba = obj.get("visual", {}).get("rgba", "")
             color = [float(x) for x in rgba.split()] if rgba else []
-            
+
             # Parse friction as list
             friction_str = obj.get("friction", "0.4 0 0")
-            friction = [float(x) for x in friction_str.split()] if friction_str else [0.4]
+            friction = (
+                [float(x) for x in friction_str.split()] if friction_str else [0.4]
+            )
 
             props[obj_id] = {
                 "mass": float(obj.get("mass", 1.0)),
@@ -76,7 +78,7 @@ class QuestionAnswers:
 
     def _describe_obj(self, p):
         return f"{p.get('color', 'unknown color')} {p.get('shape', 'object')}"
-    
+
     def _describe_obj_unique(self, obj_id: str) -> str:
         """
         Generates a unique description using the shared utility function.
@@ -86,7 +88,7 @@ class QuestionAnswers:
             objects=self.objects,
             frames=self.frames,
             appeared_obj_ids=self.appeared_obj_ids,
-            rgba_to_name_func=self._rgba_to_name
+            rgba_to_name_func=self._rgba_to_name,
         )
 
     def _get_taxonomy_sequences(self) -> Dict[str, List[List[str]]]:
@@ -101,7 +103,7 @@ class QuestionAnswers:
                 if bbox == [[0, 0], [0, 0]]:
                     taxonomy[obj_id].append([])
                     continue
-                
+
                 labels = []
                 for tax in obj_state.get("taxonomy", []):
                     labels.extend(tax.get("labels", []))
@@ -122,27 +124,33 @@ class QuestionAnswers:
             for current_labels in label_seq:
                 curr_lower = [l.lower() for l in current_labels]
                 prev_lower = [l.lower() for l in prev_labels]
-                
+
                 if any("rolling" in l for l in curr_lower):
                     transitions["rolling"].add(obj_id)
-                
+
                 if any("stationary" in l for l in curr_lower):
                     transitions["stopped_objects"].add(obj_id)
 
                 if prev_lower and curr_lower:
-                    is_prev_moving = any(s in l for l in prev_lower for s in ["moving", "accelerating", "decelerating", "sliding"])
+                    is_prev_moving = any(
+                        s in l
+                        for l in prev_lower
+                        for s in ["moving", "accelerating", "decelerating", "sliding"]
+                    )
                     is_curr_stat = any("stationary" in l for l in curr_lower)
-                    
+
                     if is_prev_moving and is_curr_stat:
                         transitions["moving_to_stationary"].add(obj_id)
-                    
-                    if any("stationary" in l for l in prev_lower) and any("accelerating" in l for l in curr_lower):
+
+                    if any("stationary" in l for l in prev_lower) and any(
+                        "accelerating" in l for l in curr_lower
+                    ):
                         transitions["stationary_to_moving"].add(obj_id)
-                
+
                 prev_labels = current_labels
 
         return transitions
-    
+
     def _identify_collisions(self):
         """
         Identify collisions from taxonomy (collision events) instead of interactions list.
@@ -152,7 +160,7 @@ class QuestionAnswers:
 
         for frame in self.frames:
             frame_time = frame.get("time", 0)
-            
+
             for obj_id, obj_state in frame.get("objects", {}).items():
                 if obj_id not in self.appeared_obj_ids:
                     continue
@@ -160,9 +168,10 @@ class QuestionAnswers:
                 # Search taxonomy for collision events
                 for tax in obj_state.get("taxonomy", []):
                     # Check if this is a collision event
-                    if (tax.get("category") == "Interaction Events" and 
-                        tax.get("subcategory") == "Collision"):
-                        
+                    if (
+                        tax.get("category") == "Interaction Events"
+                        and tax.get("subcategory") == "Collision"
+                    ):
                         collision_type = tax.get("labels", [None])[0]
                         if not collision_type:
                             continue
@@ -173,11 +182,7 @@ class QuestionAnswers:
                         momentum_check = tax.get("momentum_check", {})
                         other_obj_id = context.get("other_obj_id", "unknown")
 
-                        collision_key = (
-                            round(frame_time, 3),
-                            obj_id,
-                            other_obj_id
-                        )
+                        collision_key = (round(frame_time, 3), obj_id, other_obj_id)
 
                         # Skip if already processed
                         if collision_key in seen_collisions:
@@ -194,7 +199,7 @@ class QuestionAnswers:
                                     g1, g2 = interaction[0], interaction[1]
                                     o1 = f"geom_obj{g1 - 1}"
                                     o2 = f"geom_obj{g2 - 1}"
-                                    
+
                                     if obj_id in [o1, o2]:
                                         other = o2 if o1 == obj_id else o1
                                         if other in self.appeared_obj_ids:
@@ -217,7 +222,6 @@ class QuestionAnswers:
                         )
 
         return collisions
-
 
     def _collision_questions(self, collisions):
         questions = []
@@ -322,16 +326,17 @@ class QuestionAnswers:
                 "category": "Motion Analysis",
                 "question_type": "stopped_objects_count",
                 "rationale": "Objects that are labeled as stationary at any point are counted.",
-                "physics_signals": {"stopped_objects": list(transitions["stopped_objects"])},
+                "physics_signals": {
+                    "stopped_objects": list(transitions["stopped_objects"])
+                },
             }
         )
-
 
         # Highest friction coefficient question
         if self.props:
             max_friction_obj = max(
-                self.props.items(), 
-                key=lambda kv: kv[1]["friction"][0] if kv[1]["friction"] else 0.4
+                self.props.items(),
+                key=lambda kv: kv[1]["friction"][0] if kv[1]["friction"] else 0.4,
             )[0]
             correct = self._describe_obj(self.props[max_friction_obj])
             options = [self._describe_obj(p) for p in self.props.values()]
@@ -374,18 +379,17 @@ class QuestionAnswers:
         fully_visible_objects = []
         for obj_id in self.props.keys():
             visible_in_all = all(
-                obj_id in frame.get("objects", {}) 
-                for frame in self.frames
+                obj_id in frame.get("objects", {}) for frame in self.frames
             )
             if visible_in_all:
                 fully_visible_objects.append(obj_id)
-        
+
         # Pick one object randomly if there are multiple
         if fully_visible_objects:
             selected_obj_id = random.choice(fully_visible_objects)
             p = self.props[selected_obj_id]
             desc = self._describe_obj_unique(selected_obj_id)
-            
+
             count_stat = 0
             first_stat_frame = None
             for i, fr in enumerate(self.frames):
@@ -425,7 +429,10 @@ class QuestionAnswers:
                         "category": "Motion Analysis",
                         "question_type": "stationary_duration",
                         "rationale": f"Count the number of video frames labelled 'stationary' for this object, then divide by the frame-rate ({self.fps} fps).",
-                        "physics_signals": {"stationary_frames": count_stat, "fps": self.fps},
+                        "physics_signals": {
+                            "stationary_frames": count_stat,
+                            "fps": self.fps,
+                        },
                     }
                 )
 
@@ -453,7 +460,10 @@ class QuestionAnswers:
                             "category": "Motion Analysis",
                             "question_type": "stationary_start_time",
                             "rationale": f"Find the first frame where the object is labeled 'stationary', then divide the frame index by the frame-rate ({self.fps} fps).",
-                            "physics_signals": {"first_stationary_frame": first_stat_frame, "fps": self.fps},
+                            "physics_signals": {
+                                "first_stationary_frame": first_stat_frame,
+                                "fps": self.fps,
+                            },
                         }
                     )
 
