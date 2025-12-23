@@ -4,7 +4,8 @@ import json
 import mujoco
 import matplotlib.colors as mcolors
 
-def is_cylinder_upright(objects, model, data, object_id, alignment_threshold=0.7):
+
+def is_cylinder_upright(objects, model, data, object_id):
         """
         Returns:
             True if cylinder is upright, False if on its side or if check fails
@@ -21,31 +22,35 @@ def is_cylinder_upright(objects, model, data, object_id, alignment_threshold=0.7
         
         if obj_index is None:
             return False
-        
-        # Get quaternion from MuJoCo data
-        joint_name = f"obj{obj_index}_free"
+
         try:
-            joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
-            adr = model.jnt_dofadr[joint_id]
-            quat = data.qpos[adr + 3 : adr + 7]
-            
-            # Convert quaternion to rotation matrix
-            rot_mat = np.zeros((3, 3))
-            mujoco.mju_quat2Mat(rot_mat.ravel(), quat)
-            
-            # For a cylinder, check if its z-axis (cylinder axis) is aligned with world vertical (0, 0, 1)
-            # If the cylinder is on its end edge, the z-axis of the rotation matrix should point up
-            cylinder_axis = rot_mat[:, 2]  # z-axis of the cylinder in world coordinates
+            geom_name = f"geom_obj{obj_index}"
+            geom_id = mujoco.mj_name2id(
+                model,
+                mujoco.mjtObj.mjOBJ_GEOM,
+                geom_name,
+            )
+
+            if model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_CYLINDER:
+                return None
+
+            geom_xmat = data.geom_xmat[geom_id].reshape(3, 3)
+            cylinder_axis = geom_xmat[:, 2]
+
             world_up = np.array([0, 0, 1])
-            
-            # Check alignment: dot product close to 1 means aligned (upright)
-            alignment = np.dot(cylinder_axis, world_up)
-            
-            # Return True if cylinder is upright (alignment >= threshold)
-            return alignment >= alignment_threshold
+            alignment = abs(np.dot(cylinder_axis, world_up))
+
+            radius = model.geom_size[geom_id][0]
+            half_height = model.geom_size[geom_id][1]
+            height = 2.0 * half_height
+
+            aspect_ratio = height / (2.0 * radius)
+
+            # short cylinders needs stricter alignment
+            threshold = 0.95 if aspect_ratio < 0.5 else 0.8
+            return alignment >= threshold
         except:
-            # If we can't get orientation, return False for safety
-            return False
+            return None
 
 
 def set_position_and_velocity(obj):
@@ -55,23 +60,23 @@ def set_position_and_velocity(obj):
         angle = random.uniform(0, 2 * np.pi)
         x = collision_radius * np.cos(angle)
         y = collision_radius * np.sin(angle)
-        speed = random.uniform(2, 3.5)  # Reduced from (2, 5) to (0.5, 1.5) for slower movement
+        speed = random.uniform(2, 3.5) 
         obj["velocity"] = [
             -speed * np.cos(angle),
             -speed * np.sin(angle),
-            random.uniform(-0.2, 0.2),  # Reduced from (-0.2, 0.2) to (-0.1, 0.1)
+            random.uniform(-0.2, 0.2), 
         ]
 
     if obj["mode"] == "sliding":
         r = collision_radius * np.sqrt(random.uniform(0, 1))
         theta = random.uniform(0, 2 * np.pi)
         x, y = r * np.cos(theta), r * np.sin(theta)
-        speed = random.uniform(1, 2.5)  # Reduced from (1, 3) to (0.3, 1.0) for slower movement
+        speed = random.uniform(1, 2.5) 
         phi = random.uniform(0, 2 * np.pi)
         obj["velocity"] = [
             speed * np.cos(phi),
             speed * np.sin(phi),
-            random.uniform(-0.1, 0.1),  # Reduced from (-0.1, 0.1) to (-0.05, 0.05)
+            random.uniform(-0.1, 0.1), 
         ]
 
     if obj["mode"] == "stationary":
@@ -84,11 +89,11 @@ def set_position_and_velocity(obj):
         r = random.uniform(1.2, 1.5) * collision_radius
         angle = random.uniform(0, 2 * np.pi)
         x, y = r * np.cos(angle), r * np.sin(angle)
-        speed = random.uniform(0.5, 1.5)  # Reduced from (1, 2) to (0.3, 0.8) for slower movement
+        speed = random.uniform(0.5, 1.5)  
         obj["velocity"] = [
             -speed * np.cos(angle),
             -speed * np.sin(angle),
-            random.uniform(-0.1, 0.1),  # Reduced from (-0.1, 0.1) to (-0.05, 0.05)
+            random.uniform(-0.1, 0.1),
         ]
     obj["init_position_x"] = x
     obj["init_position_y"] = y
@@ -209,17 +214,6 @@ def describe_object_unique(
     rgba_to_name_func=None
 ) -> str:
     """
-    Generates a unique description. If color/shape is not unique among visible objects,
-    adds spatial context or ID to ensure unambiguous referencing.
-    
-    Args:
-        target_id: The object ID to describe
-        objects: List of object dictionaries
-        frames: List of frame dictionaries
-        appeared_obj_ids: Set of object IDs that appeared in frames
-        rgba_to_name_func: Optional function to convert RGBA to color name (for compatibility)
-    
-    Returns:
         Unique description string like "the red cube" or "the red cube on the left"
     """
     # Find target object

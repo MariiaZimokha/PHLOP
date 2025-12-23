@@ -804,267 +804,96 @@ class AdvancedPhysicsQuestions:
         Direct cause-effect questions grounded in collision taxonomy.
         """
         questions = []
-        seen_collisions = set()  # Track (time, obj_pair) to avoid duplicates
+        seen_collisions = set()
 
         for i in range(1, len(self.frames) - 1):
-            prev_f = self.frames[i - 1]
             cur_f = self.frames[i]
-            next_f = self.frames[i + 1]
-
             if not cur_f.get("interactions"):
                 continue
 
             t = cur_f.get("time", 0)
 
-            for i, obj1, obj2, cur_f in self._iter_collisions():
-                # for tracking if the same collision has been processed already
-                collision_key = (round(t, 3), tuple(sorted([obj1, obj2])))
+            # Iterate over interactions in the current frame
+            for g1, g2 in cur_f["interactions"]:
+                obj1 = self._geom_id_to_obj_id(g1)
+                obj2 = self._geom_id_to_obj_id(g2)
                 
-                # Skip if already processed
+                # Deduplication key
+                collision_key = (round(t, 3), tuple(sorted([obj1, obj2])))
                 if collision_key in seen_collisions:
                     continue
                 seen_collisions.add(collision_key)
 
-                o1_data = cur_f["objects"].get(obj1, {})
-                o2_data = cur_f["objects"].get(obj2, {})
+                if obj1 not in self.appeared_obj_ids or obj2 not in self.appeared_obj_ids:
+                    continue
 
-                col_tax = (
-                    self._get_taxonomy(o1_data, "Interaction Events", "Collision")
-                    or self._get_taxonomy(o2_data, "Interaction Events", "Collision")
-                )
+                # get collision taxonomy data specificallyeven
+                o1_data = cur_f["objects"].get(obj1, {})
+                col_tax = self._get_taxonomy(o1_data, "Interaction Events", "Collision")
+                
                 if not col_tax:
                     continue
 
                 collision_data = col_tax[0]
                 collision_type = collision_data.get("labels", [None])[0]
-                energy_analysis = collision_data.get("energy_analysis")
-
-                # Get object descriptions (cached)
+                
+                energy_analysis_data = collision_data.get("energy_analysis", {})
+                
                 desc1 = self._describe_object_unique(obj1)
                 desc2 = self._describe_object_unique(obj2)
 
-                # Q1: Motion change causation
-                velocities = self._get_collision_velocities(i, obj1, obj2)
-                if not velocities:
-                    continue
-                
-                v_prev = velocities["v2_before"]
-                v_next = velocities["v2_after"]
-
-                prev_speed = self._get_speed_from_velocity(v_prev)
-                next_speed = self._get_speed_from_velocity(v_next)
-
-                if prev_speed < 0.05 and next_speed > 0.3:
-                    options = [
-                        "Yes, momentum transfer caused the motion.",
-                        "No, the object was already moving.",
-                        "No, collisions do not cause motion.",
-                        "Cannot be determined.",
-                    ]
-                    shuffled_options = self._shuffle_options(options)
-                    
-                    questions.append(
-                        {
-                            "question": (
-                                f"At t={t:.2f}s, {desc1} collides with {desc2}. "
-                                f"The second object was stationary before the collision "
-                                f"but moves afterward. Is the collision the cause?"
-                            ),
-                            "options": shuffled_options,
-                            "answer": "Yes, momentum transfer caused the motion.",
-                            "answer_type": "multiple_choice",
-                            "difficulty": "hard",
-                            "category": "Causal Reasoning",
-                            "question_type": "direct_causation",
-                            "rationale": (
-                                "The physics engine shows a transition from zero to non-zero "
-                                "velocity immediately after the collision."
-                            ),
-                            "physics_signals": {
-                                "prev_speed": prev_speed,
-                                "next_speed": next_speed,
-                                "collision": collision_type,
-                            },
-                        }
-                    )
-
-                # Q2: Collision type and energy conservation (with split-aware masking)
+                # Generate Question based on the label directly
                 if collision_type:
-                    # For val/test splits, infer collision type from energy loss instead of using label
-                    # Thresholds match physics_engine.py: Elastic (>90% conserved, <10% loss),
-                    # Partially Inelastic (50-90% conserved, 10-50% loss), Highly Inelastic (<=50% conserved, >=50% loss)
-                    if self._should_mask_labels():
-                        ke_loss = self._calculate_kinetic_energy_loss(obj1, obj2, i)
-                        if ke_loss is not None:
-                            # Infer collision type from energy loss (matching physics_engine.py thresholds)
-                            inferred_type, answer = self._infer_collision_type_from_energy_loss(ke_loss)
-                            
-                            options = [
-                                "Kinetic energy is conserved; objects bounce apart.",
-                                "Some kinetic energy is lost, but not all.",
-                                "Most kinetic energy is dissipated to heat and sound.",
-                                "Energy conservation doesn't apply to collisions.",
-                            ]
-                            shuffled_options = self._shuffle_options(options)
-                            
-                            questions.append(
-                                {
-                                    "question": (
-                                        f"At t={t:.2f}s, {desc1} collides with {desc2}. "
-                                        f"Based on the observed energy loss ({round(ke_loss, 1)}%), "
-                                        f"what can we infer about energy conservation?"
-                                    ),
-                                    "options": shuffled_options,
-                                    "answer": answer,
-                                    "answer_type": "multiple_choice",
-                                    "difficulty": "hard",
-                                    "category": "Causal Reasoning",
-                                    "question_type": "energy_analysis",
-                                    "rationale": (
-                                        f"Energy loss of {round(ke_loss, 1)}% indicates a {inferred_type.lower()} collision. "
-                                        f"Energy classification: {energy_analysis}"
-                                    ),
-                                    "physics_signals": {
-                                        "inferred_collision_type": inferred_type,
-                                        "energy_loss": round(ke_loss, 1),
-                                        "energy_analysis": energy_analysis,
-                                    },
-                                }
-                            )
-                    else:
-                        # Train split: can use taxonomy labels directly
-                        # Labels match physics_engine.py: "Elastic Collision", "Partially Inelastic Collision", "Highly Inelastic Collision"
-                        if collision_type == "Elastic Collision":
-                            answer = "Kinetic energy is conserved; objects bounce apart."
-                            options = [
-                                "Kinetic energy is conserved; objects bounce apart.",
-                                "All energy is lost to heat and sound.",
-                                "Energy increases during the collision.",
-                                "Energy conservation doesn't apply to collisions.",
-                            ]
-                        elif collision_type == "Partially Inelastic Collision":
-                            answer = "Some kinetic energy is lost, but not all."
-                            options = [
-                                "Some kinetic energy is lost, but not all.",
-                                "Kinetic energy is completely conserved.",
-                                "All energy is lost to heat and sound.",
-                                "Energy increases during the collision.",
-                            ]
-                        elif collision_type == "Highly Inelastic Collision":
-                            answer = "Most kinetic energy is dissipated to heat and sound."
-                            options = [
-                                "Most kinetic energy is dissipated to heat and sound.",
-                                "Kinetic energy is completely conserved.",
-                                "Some energy is created during collision.",
-                                "Energy conservation doesn't apply here.",
-                            ]
-                        else:
-                            continue
-
-                        shuffled_options = self._shuffle_options(options)
-                        
-                        questions.append(
-                            {
-                                "question": (
-                                    f"At t={t:.2f}s, {desc1} collides with {desc2}. "
-                                    f"The collision is classified as '{collision_type}'. "
-                                    f"What does this tell us about energy conservation?"
-                                ),
-                                "options": shuffled_options,
-                                "answer": answer,
-                                "answer_type": "multiple_choice",
-                                "difficulty": "hard",
-                                "category": "Causal Reasoning",
-                                "question_type": "energy_analysis",
-                                "rationale": (
-                                    f"Energy classification: {energy_analysis}"
-                                ),
-                                "physics_signals": {
-                                    "collision_type": collision_type,
-                                    "energy_analysis": energy_analysis,
-                                },
-                            }
-                        )
-
-                # Q3: Kinetic energy loss percentage (30% decision, 70% numeric)
-                ke_loss = self._calculate_kinetic_energy_loss(obj1, obj2, i)
-                if ke_loss is not None and ke_loss >= 0:
-                    use_decision = random.random() < 0.3
+                    answer = ""
+                    options = []
                     
-                    if use_decision:
-                        # Decision question: Was energy loss significant?
-                        # Threshold matches physics_engine.py: Highly Inelastic = ke_ratio <= 0.5, so energy loss >= 50%
-                        threshold = 50.0  # 50% threshold for highly inelastic collision (matching physics_engine.py)
-                        is_highly_inelastic = ke_loss >= threshold
-                        
+                    if "Elastic" in collision_type:
+                        answer = "Kinetic energy is conserved; objects bounce apart."
                         options = [
-                            f"Yes, the energy loss ({round(ke_loss, 1)}%) was significant (≥{threshold}%), indicating a highly inelastic collision.",
-                            f"No, the energy loss ({round(ke_loss, 1)}%) was not significant (<{threshold}%), indicating a more elastic collision.",
-                            "Energy loss doesn't determine collision type.",
-                            "Cannot determine from the data provided.",
+                            "Kinetic energy is conserved; objects bounce apart.",
+                            "All energy is lost to heat and sound.",
+                            "Energy increases during the collision.",
+                            "Energy conservation doesn't apply."
                         ]
-                        shuffled = self._shuffle_options(options)
-                        
-                        answer = options[0] if is_highly_inelastic else options[1]
-                        
-                        questions.append(
-                            {
-                                "question": (
-                                    f"When {desc1} collided with {desc2}, was the kinetic energy loss "
-                                    f"significant enough (≥{threshold}%) to classify this as a highly inelastic collision?"
-                                ),
-                                "options": shuffled,
-                                "answer": answer,
-                                "answer_type": "multiple_choice",
-                                "difficulty": "very_hard",
-                                "category": "Energy Analysis",
-                                "question_type": "kinetic_energy_loss_decision",
-                                "rationale": (
-                                    f"Energy loss was {round(ke_loss, 1)}%. "
-                                    f"Threshold for highly inelastic collision is {threshold}% (matching physics_engine.py: ke_ratio <= 0.5)."
-                                ),
-                                "physics_signals": {
-                                    "percent_ke_lost": round(ke_loss, 1),
-                                    "threshold": threshold,
-                                    "collision_type": collision_type,
-                                },
-                            }
-                        )
+                    elif "Highly Inelastic" in collision_type:
+                        answer = "Most kinetic energy is dissipated."
+                        options = [
+                            "Most kinetic energy is dissipated.",
+                            "Kinetic energy is completely conserved.",
+                            "Objects bounce perfectly.",
+                            "Energy increases."
+                        ]
                     else:
-                        # Original numeric question
-                        def make_opts(true_val):
-                            a = round(true_val * 0.8, 1)
-                            b = round(min(true_val + 10, 100), 1)
-                            c = round(abs(true_val - 50), 1)
-                            opts = list({round(true_val, 1), a, b, c})
-                            random.shuffle(opts)
-                            return [f"{v:.1f}%" for v in opts]
-                        
-                        options = make_opts(round(ke_loss, 1))
-                        
-                        questions.append(
-                            {
-                                "question": (
-                                    f"What percentage of the system's kinetic energy was lost "
-                                    f"when the {desc1} collided with the {desc2}?"
-                                ),
-                                "options": options,
-                                "answer": f"{round(ke_loss, 1):.1f}%",
-                                "answer_type": "multiple_choice",
-                                "difficulty": "very_hard",
-                                "category": "Energy Analysis",
-                                "question_type": "kinetic_energy_loss",
-                                "rationale": (
-                                    "For each object, kinetic energy KE = 0.5*m*|v|^2. "
-                                    "Compute before and after collision, sum them, then compute the percentage lost."
-                                ),
-                                "physics_signals": {
-                                    "percent_ke_lost": round(ke_loss, 1),
-                                    "collision_type": collision_type,
-                                },
-                            }
-                        )
+                        # Partially Inelastic / Default
+                        answer = "Some kinetic energy is lost."
+                        options = [
+                            "Some kinetic energy is lost.",
+                            "Kinetic energy is completely conserved.",
+                            "All energy is lost.",
+                            "Energy increases."
+                        ]
 
+                    shuffled_options = self._shuffle_options(options)
+
+                    questions.append({
+                        "question": (
+                            f"At t={t:.2f}s, {desc1} collides with {desc2}. "
+                            f"The collision is classified as '{collision_type}'. "
+                            f"What does this imply about the system's energy?"
+                        ),
+                        "options": shuffled_options,
+                        "answer": answer,
+                        "answer_type": "multiple_choice",
+                        "difficulty": "hard",
+                        "category": "Causal Reasoning",
+                        "question_type": "energy_analysis_taxonomy",
+                        "rationale": f"Based on physics engine classification: {collision_type}",
+                        "physics_signals": {
+                            "collision_type": collision_type,
+                            "ground_truth_data": energy_analysis_data
+                        },
+                    })
+        
         return questions
 
     def generate_counterfactual_questions(self) -> List[Dict]:

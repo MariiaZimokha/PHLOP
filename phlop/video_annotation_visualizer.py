@@ -73,8 +73,8 @@ class VideoAnnotationVisualizer:
                     bg_color = (0, 0, 0)  # Black background for contrast
 
                     #  description
-                    v = round(np.linalg.norm(velocity), 4)
-                    av = round(np.linalg.norm(angular_velocity), 4)
+                    v = round(np.linalg.norm(velocity), 2)
+                    av = round(np.linalg.norm(angular_velocity), 2)
                     # print("taxonomy_labels,", taxonomy_labels)
                     # print("velocity,", v, velocity)
                     # text = f"Mass: {mass:.2f} kg\nVelocity: {[round(v, 2) for v in velocity]}\nMaterial: {material}\nTaxonomy: {','.join(taxonomy_labels)}"

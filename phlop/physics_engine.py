@@ -5,8 +5,8 @@ class PhysicsEngine:
     def __init__(
         self,
         precision=5,
-        velocity_threshold=1e-3,
-        acceleration_threshold=1e-3,
+        velocity_threshold=0.05,
+        acceleration_threshold=0.1,
         epsilon=0.01,
         gravity=9.81,
         collision_elastic_factor=0.5,

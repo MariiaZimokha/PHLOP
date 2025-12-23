@@ -97,6 +97,11 @@ class QuestionAnswers:
                 if obj_id not in self.appeared_obj_ids:
                     continue
 
+                bbox = obj_state.get("bbox", [[0, 0], [0, 0]])
+                if bbox == [[0, 0], [0, 0]]:
+                    taxonomy[obj_id].append([])
+                    continue
+                
                 labels = []
                 for tax in obj_state.get("taxonomy", []):
                     labels.extend(tax.get("labels", []))
@@ -105,7 +110,6 @@ class QuestionAnswers:
         return taxonomy
 
     def _get_state_transitions(self, taxonomy) -> Dict[str, set]:
-        """Get state transitions from taxonomy sequences."""
         transitions = {
             "stopped_objects": set(),
             "moving_to_stationary": set(),
@@ -114,28 +118,31 @@ class QuestionAnswers:
         }
 
         for obj_id, label_seq in taxonomy.items():
-            prev = None
-            for labels in label_seq:
-                current = labels[-1].lower() if labels else ""
-                if "rolling" in current:
+            prev_labels = []
+            for current_labels in label_seq:
+                curr_lower = [l.lower() for l in current_labels]
+                prev_lower = [l.lower() for l in prev_labels]
+                
+                if any("rolling" in l for l in curr_lower):
                     transitions["rolling"].add(obj_id)
-                if prev:
-                    if (
-                        any(
-                            s in prev
-                            for s in ["moving", "accelerating", "decelerating"]
-                        )
-                        and "stationary" in current
-                    ):
+                
+                if any("stationary" in l for l in curr_lower):
+                    transitions["stopped_objects"].add(obj_id)
+
+                if prev_lower and curr_lower:
+                    is_prev_moving = any(s in l for l in prev_lower for s in ["moving", "accelerating", "decelerating", "sliding"])
+                    is_curr_stat = any("stationary" in l for l in curr_lower)
+                    
+                    if is_prev_moving and is_curr_stat:
                         transitions["moving_to_stationary"].add(obj_id)
-                    if "stationary" in prev and "accelerating" in current:
+                    
+                    if any("stationary" in l for l in prev_lower) and any("accelerating" in l for l in curr_lower):
                         transitions["stationary_to_moving"].add(obj_id)
-                prev = current
-            if any("stationary" in s.lower() for labels in label_seq for s in labels):
-                transitions["stopped_objects"].add(obj_id)
+                
+                prev_labels = current_labels
 
         return transitions
-
+    
     def _identify_collisions(self):
         """
         Identify collisions from taxonomy (collision events) instead of interactions list.

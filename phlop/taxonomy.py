@@ -177,8 +177,18 @@ class PhysicsTaxonomy:
             upright = is_cylinder_upright(self.objects, model, data, object_id)
             if upright:
                 return None
-        
-        if shape in ["ball", "sphere", "cylinder"]:
+            print('upright', upright)
+            rotational_motion = self.physics_engine.detect_rotational_motion(
+                    angular_velocity, linear_velocity, radius
+                )
+            if rotational_motion:
+                 return {
+                        "category": "Kinematic Events",
+                        "subcategory": "Rotational Motion",
+                        "labels": [rotational_motion],
+                    }
+            
+        if shape in ["ball", "sphere"]:
             rotational_motion = self.physics_engine.detect_rotational_motion(
                 angular_velocity, linear_velocity, radius
             )
