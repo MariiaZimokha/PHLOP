@@ -37,6 +37,7 @@ import shutil
 
 HF_API = HfApi(token=HF_TOKEN)
 
+
 def atomic_write_json(data, path):
     """Write JSON atomically to prevent empty/corrupted files."""
     dir_path = os.path.dirname(path)
@@ -48,18 +49,29 @@ def atomic_write_json(data, path):
 
     shutil.move(temp_name, path)
 
+
 def upload_with_retry(fn, retries=8, base_sleep=2):
     for i in range(retries):
         try:
             return fn()
         except (HfHubHTTPError, RuntimeError) as e:
             # check for 429 (Too Many Requests) or 500+ server errors
-            is_rate_limit = isinstance(e, HfHubHTTPError) and e.response is not None and e.response.status_code == 429
-            is_server_error = isinstance(e, HfHubHTTPError) and e.response is not None and e.response.status_code >= 500
-            
+            is_rate_limit = (
+                isinstance(e, HfHubHTTPError)
+                and e.response is not None
+                and e.response.status_code == 429
+            )
+            is_server_error = (
+                isinstance(e, HfHubHTTPError)
+                and e.response is not None
+                and e.response.status_code >= 500
+            )
+
             if is_rate_limit or is_server_error:
-                sleep_time = base_sleep * (2 ** i)  # Exponential backoff
-                print(f"⚠️  Upload snag (Attempt {i+1}/{retries}). Sleeping {sleep_time}s... Error: {e}")
+                sleep_time = base_sleep * (2**i)  # Exponential backoff
+                print(
+                    f"⚠️  Upload snag (Attempt {i + 1}/{retries}). Sleeping {sleep_time}s... Error: {e}"
+                )
                 time.sleep(sleep_time)
             else:
                 raise e
@@ -71,7 +83,7 @@ def upload_shard_folder(shard_id: int, shard_dir: Path, repo_id: str, split: str
 
     staging_root = Path("temp_staging")
     repo_structure_path = staging_root / "data" / split / f"shard_{shard_id:04d}"
-    
+
     if staging_root.exists():
         shutil.rmtree(staging_root)
     repo_structure_path.mkdir(parents=True)
@@ -81,12 +93,14 @@ def upload_shard_folder(shard_id: int, shard_dir: Path, repo_id: str, split: str
 
     try:
         print(f"🚀 Committing large folder to {repo_id}...")
-        upload_with_retry(lambda: HF_API.upload_large_folder(
-            folder_path=str(staging_root),
-            repo_id=repo_id,
-            repo_type="dataset",
-        ))
-        
+        upload_with_retry(
+            lambda: HF_API.upload_large_folder(
+                folder_path=str(staging_root),
+                repo_id=repo_id,
+                repo_type="dataset",
+            )
+        )
+
         print(f"  ✅ Shard {shard_id} upload complete!")
         return True
     except Exception as e:
@@ -120,19 +134,19 @@ def sample_camera_for_split(split: str, mode: str = "static"):
     - Shallow angles (near horizon): Camera moves back for wider view
     """
     camera_cfg = SPLIT_CONFIG[split]["camera"]
-    
+
     # Get ranges from split config
     az_min, az_max = camera_cfg["azimuth_range"]
     elev_min, elev_max = camera_cfg["elevation_range"]
     distance_range = camera_cfg["distance_range"]
     lookat_z_min, lookat_z_max = camera_cfg["lookat_z_range"]
     limits = camera_cfg["limits"]
-    
+
     # Sample random values within ranges
     az = random.uniform(az_min, az_max)
     elev = random.uniform(elev_min, elev_max)
     lookat_z = random.uniform(lookat_z_min, lookat_z_max)
-    
+
     # Calculate adaptive distance based on elevation
     angle_range = (elev_min, elev_max)
     dist = calculate_adaptive_distance(elev, angle_range, distance_range)
@@ -219,10 +233,11 @@ def run_single_simulation(
         annotated_video_path=str(annotated_video),
     )
 
-
     qa_json_path = scene_dir / "qa.json"
     qa_pairs = QuestionAnswers(file_path).get_questions_answers()
-    advanced_qa_pairs = AdvancedPhysicsQuestions(file_path, split=split).generate_all_advanced_questions()
+    advanced_qa_pairs = AdvancedPhysicsQuestions(
+        file_path, split=split
+    ).generate_all_advanced_questions()
     qa_pairs = qa_pairs + advanced_qa_pairs
     atomic_write_json(qa_pairs, qa_json_path)
 
@@ -285,10 +300,6 @@ def generate_training_shard(shard_id, start_idx, count):
                 "segmentated_file": {
                     cam_mode: f"data/train/shard_{shard_id:04d}/train_{global_idx}/simulation_objects_segmented.mp4"
                 },
-                # "video_file": f"data/train/shard_{shard_id:04d}/train_{global_idx}/simulation_objects.mp4",
-                # "segmentated_file": f"data/train/shard_{shard_id:04d}/train_{global_idx}/simulation_objects_segmented.mp4",
-                # "metadata_file": f"data/train/shard_{shard_id:04d}/train_{global_idx}/meta.json",
-                # "qa_file": f"data/train/shard_{shard_id:04d}/train_{global_idx}/qa.json",
             }
         )
         print(' out["metadata"] ', out["metadata"])
@@ -314,6 +325,7 @@ def generate_training_shard(shard_id, start_idx, count):
         os.makedirs(OUTPUT_DIR, exist_ok=True)
     else:
         print("⚠️ Upload failed. Keeping local data for inspection.")
+
 
 def generate_validation_shard(shard_id, start_idx, count, split):
     obj = Object()
@@ -372,19 +384,19 @@ def generate_validation_shard(shard_id, start_idx, count, split):
                 # Static
                 "videos": {
                     "static": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/static/simulation_objects.mp4",
-                    "moving": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/moving/simulation_objects.mp4"
+                    "moving": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/moving/simulation_objects.mp4",
                 },
                 "metadata": {
                     "static": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/static/meta.json",
-                    "moving": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/moving/meta.json"
+                    "moving": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/moving/meta.json",
                 },
                 "qa": {
                     "static": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/static/qa.json",
-                    "moving": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/moving/qa.json"
+                    "moving": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/moving/qa.json",
                 },
                 "segmentated_file": {
                     "static": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/static/simulation_objects_segmented.mp4",
-                    "moving": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/moving/simulation_objects_segmented.mp4"
+                    "moving": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/moving/simulation_objects_segmented.mp4",
                 },
             }
         )
@@ -459,10 +471,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-# to do
-# start uploading some data
-# in colab build dataloader and show some samples
-#  zero shot inference on val set

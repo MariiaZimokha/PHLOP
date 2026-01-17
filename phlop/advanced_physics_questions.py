@@ -1322,6 +1322,18 @@ class AdvancedPhysicsQuestions:
                                 obj_desc = self._describe_object_unique(obj_id)
                                 next_t = next_frame.get("time", 0)
 
+                                options = [
+                                        "Yes, this is consistent - an object can transition from stationary to accelerating.",
+                                        "No, this is inconsistent - stationary objects cannot accelerate.",
+                                        "Only if an external force is applied.",
+                                        "This violates conservation of energy.",
+                                    ]
+                                question_text = (
+                                        f"At t={t:.2f}s, {obj_desc} is labeled as 'Stationary'. "
+                                        f"At t={next_t:.2f}s, it is labeled as 'Accelerating'. "
+                                        f"Is this transition consistent?"
+                                    )
+
                                 # For test/val splits, mask labels and use velocity inference
                                 if self._should_mask_labels():
                                     inferred_state_curr = (
@@ -1356,19 +1368,6 @@ class AdvancedPhysicsQuestions:
                                             f"At t={next_t:.2f}s, its velocity magnitude is {self._get_speed_from_velocity(next_vel):.2f} m/s. "
                                             f"Is this transition from stationary to accelerating physically consistent?"
                                         )
-                                else:
-                                    options = [
-                                        "Yes, this is consistent - an object can transition from stationary to accelerating.",
-                                        "No, this is inconsistent - stationary objects cannot accelerate.",
-                                        "Only if an external force is applied.",
-                                        "This violates conservation of energy.",
-                                    ]
-                                    question_text = (
-                                        f"At t={t:.2f}s, {obj_desc} is labeled as 'Stationary'. "
-                                        f"At t={next_t:.2f}s, it is labeled as 'Accelerating'. "
-                                        f"Is this transition consistent?"
-                                    )
-
                                 shuffled_options = self._shuffle_options(options)
 
                                 questions.append(
