@@ -1,5 +1,4 @@
 import numpy as np
-import mujoco
 from collections import deque
 
 from phlop.physics_engine import PhysicsEngine

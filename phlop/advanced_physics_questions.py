@@ -1,4 +1,3 @@
-import json
 import random
 import numpy as np
 from typing import List, Dict, Optional
@@ -506,7 +505,7 @@ class AdvancedPhysicsQuestions:
             f"{desc_high} (difference: {diff:.3f})",
             f"{desc_low} (difference: {diff:.3f})",
             f"{desc_high} (difference: {round(diff * 0.5, 3):.3f})",
-            f"They have equal friction coefficients",
+            "They have equal friction coefficients",
         ]
         shuffled = self._shuffle_options(options)
 
@@ -562,7 +561,7 @@ class AdvancedPhysicsQuestions:
         questions.append(
             {
                 "question": (
-                    f"What is the distribution of object shapes in the simulation?"
+                    "What is the distribution of object shapes in the simulation?"
                 ),
                 "options": shuffled,
                 "answer": shapes_list,
@@ -608,7 +607,7 @@ class AdvancedPhysicsQuestions:
         questions.append(
             {
                 "question": (
-                    f"Which object reached the highest peak velocity during the simulation?"
+                    "Which object reached the highest peak velocity during the simulation?"
                 ),
                 "options": shuffled,
                 "answer": f"{desc_fastest} ({round(fastest_speed, 2):.2f} m/s)",
@@ -1300,16 +1299,16 @@ class AdvancedPhysicsQuestions:
                                 next_t = next_frame.get("time", 0)
 
                                 options = [
-                                        "Yes, this is consistent - an object can transition from stationary to accelerating.",
-                                        "No, this is inconsistent - stationary objects cannot accelerate.",
-                                        "Only if an external force is applied.",
-                                        "This violates conservation of energy.",
-                                    ]
+                                    "Yes, this is consistent - an object can transition from stationary to accelerating.",
+                                    "No, this is inconsistent - stationary objects cannot accelerate.",
+                                    "Only if an external force is applied.",
+                                    "This violates conservation of energy.",
+                                ]
                                 question_text = (
-                                        f"At t={t:.2f}s, {obj_desc} is labeled as 'Stationary'. "
-                                        f"At t={next_t:.2f}s, it is labeled as 'Accelerating'. "
-                                        f"Is this transition consistent?"
-                                    )
+                                    f"At t={t:.2f}s, {obj_desc} is labeled as 'Stationary'. "
+                                    f"At t={next_t:.2f}s, it is labeled as 'Accelerating'. "
+                                    f"Is this transition consistent?"
+                                )
 
                                 # For test/val splits, mask labels and use velocity inference
                                 if self._should_mask_labels():

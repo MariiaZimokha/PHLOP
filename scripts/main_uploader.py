@@ -32,8 +32,6 @@ from upload.config import (
     HEIGHT,
     FPS,
 )
-import tempfile
-import shutil
 
 HF_API = HfApi(token=HF_TOKEN)
 
@@ -312,10 +310,7 @@ def generate_training_shard(shard_id, start_idx, count):
     print(f"✅ Saved parquet: {parquet_filename}")
 
     success = upload_shard_folder(
-        shard_id=shard_id,
-        shard_dir=OUTPUT_DIR,
-        repo_id=HF_REPO,
-        split="train"
+        shard_id=shard_id, shard_dir=OUTPUT_DIR, repo_id=HF_REPO, split="train"
     )
 
     # Safe cleanup

@@ -1,5 +1,4 @@
 import os
-import json
 import re
 import random
 from typing import List, Dict
@@ -52,7 +51,6 @@ class PHOLPhysicsDataset(Dataset):
 
     def __len__(self):
         return len(self.scenes)
-
 
     def _get_physical_props(self, objects: List[Dict]) -> Dict:
         props = {}
@@ -787,7 +785,6 @@ class PHOLPhysicsDataset(Dataset):
             )
 
         return questions
-
 
     def is_visibly_valid(self, bbox):
         if bbox == [[0, 0], [0, 0]]:

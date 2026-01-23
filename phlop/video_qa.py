@@ -69,9 +69,21 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
         return lines
 
     def render_text_frame(
-        frame_base, text_block, width, y0, dy, font, font_scale, thickness,
-        font_color, shadow_color, shadow_offset, background_color, background_alpha,
-        line_type, max_width
+        frame_base,
+        text_block,
+        width,
+        y0,
+        dy,
+        font,
+        font_scale,
+        thickness,
+        font_color,
+        shadow_color,
+        shadow_offset,
+        background_color,
+        background_alpha,
+        line_type,
+        max_width,
     ):
         """Helper function to render text on a frame with background."""
         frame_text = frame_base.copy()
@@ -135,18 +147,42 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
         cumulative_text.append("Q: " + question)
         text_block = "\n\n".join(cumulative_text)
         frame_text = render_text_frame(
-            last_frame, text_block, width, y0, dy, font, font_scale, thickness,
-            font_color, shadow_color, shadow_offset, background_color, background_alpha,
-            line_type, max_width
+            last_frame,
+            text_block,
+            width,
+            y0,
+            dy,
+            font,
+            font_scale,
+            thickness,
+            font_color,
+            shadow_color,
+            shadow_offset,
+            background_color,
+            background_alpha,
+            line_type,
+            max_width,
         )
         qa_frames.append(frame_text.copy())
 
         cumulative_text[-1] = "Q: " + question + "\nA: " + answer
         text_block = "\n\n".join(cumulative_text)
         frame_text = render_text_frame(
-            last_frame, text_block, width, y0, dy, font, font_scale, thickness,
-            font_color, shadow_color, shadow_offset, background_color, background_alpha,
-            line_type, max_width
+            last_frame,
+            text_block,
+            width,
+            y0,
+            dy,
+            font,
+            font_scale,
+            thickness,
+            font_color,
+            shadow_color,
+            shadow_offset,
+            background_color,
+            background_alpha,
+            line_type,
+            max_width,
         )
         qa_frames.append(frame_text.copy())
 
