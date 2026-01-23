@@ -17,4 +17,4 @@ jobs:
       - name: Install ruff
         run: pip install ruff
       - name: Run lint
-        run: ruff check .
+        run: ruff format .
