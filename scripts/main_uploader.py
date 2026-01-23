@@ -50,7 +50,7 @@ def atomic_write_json(data, path):
     shutil.move(temp_name, path)
 
 
-def upload_with_retry(fn, retries=8, base_sleep=2):
+def upload_with_retry(fn, retries=8, base_sleep=8):
     for i in range(retries):
         try:
             return fn()

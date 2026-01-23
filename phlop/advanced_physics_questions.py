@@ -3,50 +3,27 @@ import random
 import numpy as np
 from typing import List, Dict, Optional
 from collections import defaultdict
-import matplotlib.colors as mcolors
-from phlop.utils import describe_object_unique
+from phlop.utils import (
+    describe_object_unique,
+    rgba_to_name,
+    load_json,
+    get_appeared_object_ids,
+)
 
 
 class AdvancedPhysicsQuestions:
     def __init__(self, file_path: str, fps: int = 25, split: str = "train"):
-        self.data = self._load_json(file_path)
+        self.data = load_json(file_path)
         self.frames = self.data.get("frames", [])
         self.objects = self.data.get("objects", [])
         self.fps = fps
         self.split = split  # "train", "val", or "test"
-        self.appeared_obj_ids = self._get_appeared_object_ids()
+        self.appeared_obj_ids = get_appeared_object_ids(self.frames)
 
         # Cache frequently accessed data
         self._object_descriptions_cache = {}
         self._object_properties_cache = {}
         self._peak_velocities_cache = None
-
-    def _load_json(self, path: str) -> Dict:
-        with open(path, "r") as f:
-            return json.load(f)
-
-    def _get_appeared_object_ids(self):
-        appeared = set()
-        for frame in self.frames:
-            for obj_id, obj_state in frame.get("objects", {}).items():
-                bbox = obj_state.get("bbox", [[0, 0], [0, 0]])
-                if bbox != [[0, 0], [0, 0]]:
-                    appeared.add(obj_id)
-        return appeared
-
-    def _rgba_to_name(self, rgba):
-        if not rgba or len(rgba) < 3:
-            return "unknown color"
-        rgb = tuple(rgba[:3])
-        min_dist = float("inf")
-        best_name = "unknown color"
-        for name, hex_val in mcolors.CSS4_COLORS.items():
-            named_rgb = mcolors.to_rgb(hex_val)
-            dist = sum((c1 - c2) ** 2 for c1, c2 in zip(rgb, named_rgb))
-            if dist < min_dist:
-                min_dist = dist
-                best_name = name
-        return best_name.replace("grey", "gray")
 
     def _describe_object_unique(self, obj_id: str) -> str:
         """Get unique object description with caching."""
@@ -56,7 +33,7 @@ class AdvancedPhysicsQuestions:
                 objects=self.objects,
                 frames=self.frames,
                 appeared_obj_ids=self.appeared_obj_ids,
-                rgba_to_name_func=self._rgba_to_name,
+                rgba_to_name_func=rgba_to_name,
             )
         return self._object_descriptions_cache[obj_id]
 
@@ -76,7 +53,7 @@ class AdvancedPhysicsQuestions:
         if rgba_str:
             try:
                 rgba = [float(x) for x in rgba_str.split()]
-                color = self._rgba_to_name(rgba)
+                color = rgba_to_name(rgba)
             except (ValueError, AttributeError):
                 color = "unknown color"
         else:

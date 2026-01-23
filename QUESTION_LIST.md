@@ -251,56 +251,18 @@ This document lists all questions generated from `phlop/advanced_physics_questio
 
 ## 15. Causal Reasoning
 
-### Direct Causation (Motion Change)
-- **Question**: "At t={time}s, {object1} collides with {object2}. The second object was stationary before the collision but moves afterward. Is the collision the cause?"
-- **Source**: `advanced_physics_questions.py` → `generate_causal_questions()`
-- **Type**: Multiple Choice
-- **Difficulty**: Hard
-- **Question Type**: `direct_causation`
-- **Category**: Causal Reasoning
-
 ### Energy Analysis (Collision Type)
-- **Question**: "At t={time}s, {object1} collides with {object2}. The collision is classified as '{collision_type}'. What does this tell us about energy conservation?"
+- **Question**: "At t={time}s, {object1} collides with {object2}. The collision is classified as '{collision_type}'. What does this imply about the system's energy?"
 - **Source**: `advanced_physics_questions.py` → `generate_causal_questions()`
 - **Type**: Multiple Choice
 - **Difficulty**: Hard
-- **Question Type**: `energy_analysis`
+- **Question Type**: `energy_analysis_taxonomy`
 - **Category**: Causal Reasoning
-- **Note**: For val/test splits, collision type is inferred from energy loss instead of using taxonomy labels (split-aware masking)
-
-### Energy Analysis (Inferred from Energy Loss - Val/Test Splits)
-- **Question**: "At t={time}s, {object1} collides with {object2}. Based on the observed energy loss ({ke_loss}%), what can we infer about energy conservation?"
-- **Source**: `advanced_physics_questions.py` → `generate_causal_questions()`
-- **Type**: Multiple Choice
-- **Difficulty**: Hard
-- **Question Type**: `energy_analysis`
-- **Category**: Causal Reasoning
-- **Note**: Only generated for val/test splits. Uses thresholds matching `physics_engine.py`: <10% = Elastic, 10-50% = Partially Inelastic, ≥50% = Highly Inelastic
+- **Note**: Currently uses taxonomy labels directly. Split-aware masking (inferring collision type from energy loss for val/test splits) is not yet implemented.
 
 ---
 
-## 16. Energy Analysis
-
-### Kinetic Energy Loss Percentage
-- **Question**: "What percentage of the system's kinetic energy was lost when the {object1} collided with the {object2}?"
-- **Source**: `advanced_physics_questions.py` → `generate_causal_questions()`
-- **Type**: Multiple Choice
-- **Difficulty**: Very Hard
-- **Question Type**: `kinetic_energy_loss`
-- **Category**: Energy Analysis
-
-### Kinetic Energy Loss Decision (30% of cases)
-- **Question**: "When {object1} collided with {object2}, was the kinetic energy loss significant enough (≥50%) to classify this as a highly inelastic collision?"
-- **Source**: `advanced_physics_questions.py` → `generate_causal_questions()`
-- **Type**: Multiple Choice (Decision Question)
-- **Difficulty**: Very Hard
-- **Question Type**: `kinetic_energy_loss_decision`
-- **Category**: Energy Analysis
-- **Note**: 30% of energy loss questions are converted to decision questions. Threshold (50%) matches `physics_engine.py` (ke_ratio ≤ 0.5)
-
----
-
-## 17. Multi-Hop Reasoning
+## 16. Multi-Hop Reasoning
 
 ### Indirect Causation (3-hop chain: A → B → C)
 - **Question**: "{object1} hits {object2}. Later, {object2} hits {object3}. Is {object1} indirectly responsible for the second collision?"
@@ -331,11 +293,11 @@ This document lists all questions generated from `phlop/advanced_physics_questio
 - Questions: Object Count, Rolling Motion Detection, Stopped Objects Count, Stationary Duration, Stationary Start Time, Collision Presence, Momentum Conservation, Highest Friction Coefficient
 
 **From `advanced_physics_questions.py`:**
-- Total question types: 22
-- Categories: Collision Geometry, Post-Collision Motion, Mass & Density, Material Properties, Geometry & Shape, Comparative Questions, Counterfactual Reasoning, Property Competition, Conceptual Physics, Temporal Reasoning, Causal Reasoning, Energy Analysis, Multi-Hop Reasoning
-- Questions: Relative Velocity Magnitude, Relative Velocity Decision, Direction Reversal, Mass Ratio, Friction Coefficient Comparison, Shape Distribution, Fastest Object, Velocity Scaling, Friction Scaling, Property Competition, Newton's Second Law, Stationary but Rotating, Rolling with Slipping, Temporal Consistency, Label vs Observation Mismatch, Event Sequence, Direct Causation, Energy Analysis (with split-aware masking), Kinetic Energy Loss, Kinetic Energy Loss Decision, Indirect Causation (3-hop), Four-Hop Causation
+- Total question types: 18
+- Categories: Collision Geometry, Post-Collision Motion, Mass & Density, Material Properties, Geometry & Shape, Comparative Questions, Counterfactual Reasoning, Property Competition, Conceptual Physics, Temporal Reasoning, Causal Reasoning, Multi-Hop Reasoning
+- Questions: Relative Velocity Magnitude, Relative Velocity Decision, Direction Reversal, Mass Ratio, Friction Coefficient Comparison, Shape Distribution, Fastest Object, Velocity Scaling, Friction Scaling, Property Competition, Newton's Second Law, Stationary but Rotating, Rolling with Slipping, Temporal Consistency, Label vs Observation Mismatch, Event Sequence, Energy Analysis (Taxonomy), Indirect Causation (3-hop), Four-Hop Causation
 
-**Total**: 30 question types
+**Total**: 26 question types
 
 ### By Difficulty Level
 
@@ -343,12 +305,12 @@ This document lists all questions generated from `phlop/advanced_physics_questio
   - Object Count, Rolling Motion Detection, Stopped Objects Count, Collision Presence, Shape Distribution
 - **Medium**: 13 question types
   - Stationary Duration, Stationary Start Time, Relative Velocity Magnitude, Relative Velocity Decision, Direction Reversal, Mass Ratio, Friction Coefficient Comparison (Advanced), Highest Friction Coefficient (Basic), Fastest Object, Newton's Second Law, Stationary but Rotating, Rolling with Slipping, Event Sequence
-- **Hard**: 7 question types
-  - Momentum Conservation, Velocity Scaling, Friction Scaling, Direct Causation, Energy Analysis (Collision Type), Temporal Consistency, Label vs Observation Mismatch
-- **Very Hard**: 5 question types
-  - Kinetic Energy Loss Percentage, Kinetic Energy Loss Decision, Indirect Causation (3-hop), Four-Hop Causation, Property Competition
+- **Hard**: 6 question types
+  - Momentum Conservation, Velocity Scaling, Friction Scaling, Energy Analysis (Taxonomy), Temporal Consistency, Label vs Observation Mismatch
+- **Very Hard**: 3 question types
+  - Indirect Causation (3-hop), Four-Hop Causation, Property Competition
 
-**Total**: 30 question types
+**Total**: 26 question types
 
 ### By Answer Type
 
@@ -356,8 +318,8 @@ This document lists all questions generated from `phlop/advanced_physics_questio
   - Object Count, Rolling Motion Detection, Stopped Objects Count
 - **Yes/No**: 2 question types
   - Collision Presence, Direction Reversal
-- **Multiple Choice**: 25 question types
-  - All remaining questions (including new decision questions)
+- **Multiple Choice**: 21 question types
+  - All remaining questions (including decision questions)
 
 ---
 
@@ -374,18 +336,19 @@ This document lists all questions generated from `phlop/advanced_physics_questio
 
 4. Questions are shuffled randomly before being returned.
 
-5. **Split-Aware Label Masking**: For val/test splits, taxonomy labels are masked and questions require inference from raw velocity/position data. This ensures fair evaluation without ground truth hints.
+5. **Split-Aware Label Masking**: For val/test splits, taxonomy labels are masked and questions require inference from raw velocity/position data. This ensures fair evaluation without ground truth hints. Currently implemented for `temporal_consistency` questions. Split-aware masking for energy analysis questions (inferring collision type from energy loss) is not yet implemented.
 
-6. **Decision Questions**: 30% of numeric questions (relative velocity, energy loss) are converted to decision questions with threshold reasoning, improving reasoning depth.
+6. **Decision Questions**: 30% of relative velocity questions are converted to decision questions with threshold reasoning, improving reasoning depth.
 
-7. **Threshold Matching**: All energy loss thresholds match `physics_engine.py`:
+7. **Threshold Matching**: Energy loss thresholds in `physics_engine.py` (used for collision classification):
    - Elastic: <10% loss (ke_ratio > 0.9)
    - Partially Inelastic: 10-50% loss (ke_ratio > 0.5)
    - Highly Inelastic: ≥50% loss (ke_ratio ≤ 0.5)
+   - Note: These thresholds are used by the physics engine for taxonomy classification, but are not currently used for question generation with split-aware masking.
 
 8. **Code Optimization**: The implementation uses caching for object descriptions, properties, and peak velocities to avoid repeated calculations.
 
-5. **Question Generation Logic for Multiple Elements:**
+9. **Question Generation Logic for Multiple Elements:**
    
    The system uses different strategies when multiple elements (objects, collisions, events) are available:
    
@@ -400,11 +363,8 @@ This document lists all questions generated from `phlop/advanced_physics_questio
    - **Post-Collision Motion** (`generate_post_collision_motion_questions`): Loops through collisions, generates **ONE** question for the first valid collision, then **returns immediately** (line 254-255).
    - **Velocity Scaling** (`generate_velocity_scaling_counterfactual_questions`): Loops through objects, generates **ONE** question for the first object meeting criteria (speed > 1.0 and eventually stops), then **returns immediately** (line 525-526).
    
-   **C. Multiple Questions Per Unique Collision (Up to 3):**
-   - **Causal Questions** (`generate_causal_questions`): Uses a `seen_collisions` set to track processed collisions. For each **unique collision**, can generate up to **3 questions**:
-     - Q1: Direct causation (if object goes from stationary to moving)
-     - Q2: Energy analysis (based on collision type)
-     - Q3: Kinetic energy loss percentage
+   **C. One Question Per Unique Collision:**
+   - **Causal Questions** (`generate_causal_questions`): Uses a `seen_collisions` set to track processed collisions. For each **unique collision**, generates **ONE** energy analysis question based on collision type from taxonomy.
    - Each collision is only processed once (deduplicated by time and object pair).
    
    **D. One Question Per Object/Event (Multiple Possible):**

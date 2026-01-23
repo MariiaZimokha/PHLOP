@@ -206,6 +206,23 @@ def describe_object_basic(obj, rgba_to_name_func=None):
     return f"{color} {shape}"
 
 
+def load_json(path: str) -> dict:
+    """Load JSON file and return as dictionary."""
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def get_appeared_object_ids(frames: list) -> set:
+    """Extract set of object IDs that appear in frames (have non-zero bounding boxes)."""
+    appeared = set()
+    for frame in frames:
+        for obj_id, obj_state in frame.get("objects", {}).items():
+            bbox = obj_state.get("bbox", [[0, 0], [0, 0]])
+            if bbox != [[0, 0], [0, 0]]:
+                appeared.add(obj_id)
+    return appeared
+
+
 def describe_object_unique(
     target_id: str,
     objects: list,

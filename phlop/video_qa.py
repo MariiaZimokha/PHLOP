@@ -68,6 +68,63 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
         lines.append(current_line.strip())
         return lines
 
+    def render_text_frame(
+        frame_base, text_block, width, y0, dy, font, font_scale, thickness,
+        font_color, shadow_color, shadow_offset, background_color, background_alpha,
+        line_type, max_width
+    ):
+        """Helper function to render text on a frame with background."""
+        frame_text = frame_base.copy()
+        num_lines = len(text_block.split("\n"))
+        text_height = num_lines * dy + (num_lines - 1) * 10
+        background_rect = np.zeros((text_height, width, 3), dtype=np.uint8)
+        background_rect[:] = background_color
+        background_rect = cv2.addWeighted(
+            background_rect,
+            background_alpha,
+            np.zeros_like(background_rect),
+            1 - background_alpha,
+            0,
+        )
+
+        y0_start = y0 - 10
+        frame_text[y0_start : y0_start + text_height, 0:width] = cv2.addWeighted(
+            frame_text[y0_start : y0_start + text_height, 0:width],
+            1 - background_alpha,
+            background_rect,
+            background_alpha,
+            0,
+        )
+
+        y = y0
+        for paragraph in text_block.split("\n\n"):
+            wrapped_lines = wrap_text(paragraph, max_width, font, font_scale, thickness)
+            for line in wrapped_lines:
+                cv2.putText(
+                    frame_text,
+                    line,
+                    (50 + shadow_offset[0], y + shadow_offset[1]),
+                    font,
+                    font_scale,
+                    shadow_color,
+                    thickness,
+                    line_type,
+                )
+                cv2.putText(
+                    frame_text,
+                    line,
+                    (50, y),
+                    font,
+                    font_scale,
+                    font_color,
+                    thickness,
+                    line_type,
+                )
+                y += dy
+            y += dy
+
+        return frame_text
+
     cumulative_text = []
     qa_frames = []
 
@@ -77,110 +134,20 @@ def add_qa_to_video(questions_answers, object_json_file, output_path, num_object
 
         cumulative_text.append("Q: " + question)
         text_block = "\n\n".join(cumulative_text)
-        frame_text = last_frame.copy()
-
-        num_lines = len(text_block.split("\n"))
-        text_height = num_lines * dy + (num_lines - 1) * 10
-        background_rect = np.zeros((text_height, width, 3), dtype=np.uint8)
-        background_rect[:] = background_color
-        background_rect = cv2.addWeighted(
-            background_rect,
-            background_alpha,
-            np.zeros_like(background_rect),
-            1 - background_alpha,
-            0,
+        frame_text = render_text_frame(
+            last_frame, text_block, width, y0, dy, font, font_scale, thickness,
+            font_color, shadow_color, shadow_offset, background_color, background_alpha,
+            line_type, max_width
         )
-
-        y0_start = y0 - 10
-        frame_text[y0_start : y0_start + text_height, 0:width] = cv2.addWeighted(
-            frame_text[y0_start : y0_start + text_height, 0:width],
-            1 - background_alpha,
-            background_rect,
-            background_alpha,
-            0,
-        )
-
-        y = y0
-        for paragraph in text_block.split("\n\n"):
-            wrapped_lines = wrap_text(paragraph, max_width, font, font_scale, thickness)
-            for line in wrapped_lines:
-                cv2.putText(
-                    frame_text,
-                    line,
-                    (50 + shadow_offset[0], y + shadow_offset[1]),
-                    font,
-                    font_scale,
-                    shadow_color,
-                    thickness,
-                    line_type,
-                )
-                cv2.putText(
-                    frame_text,
-                    line,
-                    (50, y),
-                    font,
-                    font_scale,
-                    font_color,
-                    thickness,
-                    line_type,
-                )
-                y += dy
-            y += dy
-
         qa_frames.append(frame_text.copy())
 
         cumulative_text[-1] = "Q: " + question + "\nA: " + answer
         text_block = "\n\n".join(cumulative_text)
-        frame_text = last_frame.copy()
-
-        num_lines = len(text_block.split("\n"))
-        text_height = num_lines * dy + (num_lines - 1) * 10
-        background_rect = np.zeros((text_height, width, 3), dtype=np.uint8)
-        background_rect[:] = background_color
-        background_rect = cv2.addWeighted(
-            background_rect,
-            background_alpha,
-            np.zeros_like(background_rect),
-            1 - background_alpha,
-            0,
+        frame_text = render_text_frame(
+            last_frame, text_block, width, y0, dy, font, font_scale, thickness,
+            font_color, shadow_color, shadow_offset, background_color, background_alpha,
+            line_type, max_width
         )
-
-        y0_start = y0 - 10
-        frame_text[y0_start : y0_start + text_height, 0:width] = cv2.addWeighted(
-            frame_text[y0_start : y0_start + text_height, 0:width],
-            1 - background_alpha,
-            background_rect,
-            background_alpha,
-            0,
-        )
-
-        y = y0
-        for paragraph in text_block.split("\n\n"):
-            wrapped_lines = wrap_text(paragraph, max_width, font, font_scale, thickness)
-            for line in wrapped_lines:
-                cv2.putText(
-                    frame_text,
-                    line,
-                    (50 + shadow_offset[0], y + shadow_offset[1]),
-                    font,
-                    font_scale,
-                    shadow_color,
-                    thickness,
-                    line_type,
-                )
-                cv2.putText(
-                    frame_text,
-                    line,
-                    (50, y),
-                    font,
-                    font_scale,
-                    font_color,
-                    thickness,
-                    line_type,
-                )
-                y += dy
-            y += dy
-
         qa_frames.append(frame_text.copy())
 
     frames_per_display = int(fps * 1)
