@@ -1,13 +1,12 @@
 import os
-import json
 import re
 import random
 from typing import List, Dict
 import torch
 from torch.utils.data import Dataset
 from decord import VideoReader, cpu
-import matplotlib.colors as mcolors
 from collections import defaultdict
+from phlop.utils import rgba_to_name, load_json
 
 
 class PHOLPhysicsDataset(Dataset):
@@ -53,10 +52,6 @@ class PHOLPhysicsDataset(Dataset):
     def __len__(self):
         return len(self.scenes)
 
-    def _load_json(self, path: str) -> Dict:
-        with open(path, "r") as f:
-            return json.load(f)
-
     def _get_physical_props(self, objects: List[Dict]) -> Dict:
         props = {}
         for obj in objects:
@@ -64,7 +59,7 @@ class PHOLPhysicsDataset(Dataset):
             shape = obj.get("geom_type", "unknown")
             rgba_str = obj.get("visual", {}).get("rgba", "")
             color = [float(x) for x in rgba_str.split()] if rgba_str else []
-            color_name = self.rgba_to_name(color)
+            color_name = rgba_to_name(color)
             mass = obj.get("mass", None)
             elasticity = obj.get("elasticity", 0.0)
             velocity = obj.get("velocity", [0, 0, 0])
@@ -791,25 +786,6 @@ class PHOLPhysicsDataset(Dataset):
 
         return questions
 
-    def rgba_to_name(self, rgba):
-        if not rgba or len(rgba) < 3:
-            return "unknown color"
-
-        rgb = tuple(rgba[:3])
-        min_dist = float("inf")
-        best_name = "unknown color"
-
-        for name, hex_val in mcolors.CSS4_COLORS.items():
-            named_rgb = mcolors.to_rgb(hex_val)
-            dist = sum((c1 - c2) ** 2 for c1, c2 in zip(rgb, named_rgb))
-            if dist < min_dist:
-                min_dist = dist
-                best_name = name
-
-        return best_name.replace("grey", "gray").replace(
-            "gray", "grey"
-        )  # Standardize spelling
-
     def is_visibly_valid(self, bbox):
         if bbox == [[0, 0], [0, 0]]:
             return False
@@ -823,7 +799,7 @@ class PHOLPhysicsDataset(Dataset):
         sid = self.scenes[idx]
         print("sid", sid)
         scene_dir = os.path.join(self.root, sid)
-        d = self._load_json(os.path.join(scene_dir, "obj.json"))
+        d = load_json(os.path.join(scene_dir, "obj.json"))
         frames = d.get("frames", [])
 
         for frame in frames:

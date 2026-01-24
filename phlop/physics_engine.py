@@ -5,8 +5,8 @@ class PhysicsEngine:
     def __init__(
         self,
         precision=5,
-        velocity_threshold=1e-3,
-        acceleration_threshold=1e-3,
+        velocity_threshold=0.05,
+        acceleration_threshold=0.1,
         epsilon=0.01,
         gravity=9.81,
         collision_elastic_factor=0.5,
@@ -27,20 +27,22 @@ class PhysicsEngine:
         vel_curr_mag = round(np.linalg.norm(vel_curr), self.precision)
         vel_prev_mag = round(np.linalg.norm(vel_prev), self.precision)
         dt = max(dt, 1e-6)
-        
+
         accel = (vel_curr - vel_prev) / dt
         accel_mag = round(np.linalg.norm(accel), self.precision)
 
-        if (abs(vel_curr_mag) <= self.velocity_threshold and 
-            abs(vel_prev_mag) <= self.velocity_threshold):
+        if (
+            abs(vel_curr_mag) <= self.velocity_threshold
+            and abs(vel_prev_mag) <= self.velocity_threshold
+        ):
             return "Stationary"
-        
+
         if abs(vel_curr_mag) <= self.velocity_threshold:
             return "Stationary"
-        
+
         vel_change = vel_curr_mag - vel_prev_mag
         vel_change_threshold = 1e-4
-        
+
         if accel_mag >= self.acceleration_threshold:
             if vel_change > vel_change_threshold:
                 return "Accelerating"
@@ -60,19 +62,30 @@ class PhysicsEngine:
         angular_mag = np.linalg.norm(angular_velocity)
         linear_mag = np.linalg.norm(linear_velocity)
 
-        if linear_mag <= self.velocity_threshold and angular_mag <= self.velocity_threshold:
+        if (
+            linear_mag <= self.velocity_threshold
+            and angular_mag <= self.velocity_threshold
+        ):
             return None
-        if linear_mag <= self.velocity_threshold and angular_mag > self.velocity_threshold:
+        if (
+            linear_mag <= self.velocity_threshold
+            and angular_mag > self.velocity_threshold
+        ):
             return "Pure Rotation"
 
         rolling_diff = linear_mag - angular_mag * radius
         if abs(rolling_diff) < self.epsilon:
             return "Rolling Motion"
-        if linear_mag > self.velocity_threshold and angular_mag > self.velocity_threshold:
+        if (
+            linear_mag > self.velocity_threshold
+            and angular_mag > self.velocity_threshold
+        ):
             return "Rolling Motion with Slipping"
         return None
 
-    def detect_friction_event(self, velocity, acceleration, friction_coefficient, drag_coefficient=None):
+    def detect_friction_event(
+        self, velocity, acceleration, friction_coefficient, drag_coefficient=None
+    ):
         velocity = np.array(velocity)
         acceleration = np.array(acceleration)
         vel_mag = round(np.linalg.norm(velocity), self.precision)
@@ -80,34 +93,38 @@ class PhysicsEngine:
 
         expected_friction_accel = -friction_coefficient * self.gravity
         accel_threshold = self.acceleration_threshold
-        
+
         if vel_mag <= self.velocity_threshold:
             accel_threshold = self.acceleration_threshold * 1.5
-        
+
         if vel_mag <= self.velocity_threshold and accel_mag <= accel_threshold:
             return "Friction Stop"
 
         if vel_mag > self.velocity_threshold:
             if np.dot(velocity, acceleration) < 0:
                 deceleration_vector = -velocity / vel_mag * accel_mag
-                expected_deceleration_vector = -velocity / vel_mag * abs(expected_friction_accel)
-                
+                expected_deceleration_vector = (
+                    -velocity / vel_mag * abs(expected_friction_accel)
+                )
+
                 alignment = np.dot(deceleration_vector, expected_deceleration_vector)
                 if alignment > 0.90:
                     return "Sliding with Friction"
         return None
 
-    def detect_collision(self, vel1_pre, vel2_pre, vel1_post, vel2_post, normal, m1=None, m2=None):
+    def detect_collision(
+        self, vel1_pre, vel2_pre, vel1_post, vel2_post, normal, m1=None, m2=None
+    ):
         """
         Detect and classify collisions using Energy Ratio as ground truth.
-        
-        Returns: "Elastic Collision", "Partially Inelastic Collision", 
+
+        Returns: "Elastic Collision", "Partially Inelastic Collision",
                  "Highly Inelastic Collision", or None
-        
+
         PRIORITY LOGIC:
         If masses (m1, m2) are provided, Energy Conservation is used as the ground truth
         to prevent contradictions between the "Label" and "Energy Analysis".
-        
+
         Args:
             vel1_pre, vel2_pre: Pre-collision velocities
             vel1_post, vel2_post: Post-collision velocities
@@ -122,12 +139,18 @@ class PhysicsEngine:
 
         # 1. Energy Check (Ground Truth) - returns 3 types aligned with energy_analysis
         if m1 is not None and m2 is not None:
-            ke_pre = 0.5 * m1 * np.linalg.norm(vel1_pre)**2 + 0.5 * m2 * np.linalg.norm(vel2_pre)**2
-            ke_post = 0.5 * m1 * np.linalg.norm(vel1_post)**2 + 0.5 * m2 * np.linalg.norm(vel2_post)**2
-            
+            ke_pre = (
+                0.5 * m1 * np.linalg.norm(vel1_pre) ** 2
+                + 0.5 * m2 * np.linalg.norm(vel2_pre) ** 2
+            )
+            ke_post = (
+                0.5 * m1 * np.linalg.norm(vel1_post) ** 2
+                + 0.5 * m2 * np.linalg.norm(vel2_post) ** 2
+            )
+
             if ke_pre > 1e-9:
                 ke_ratio = ke_post / ke_pre
-                
+
                 if ke_ratio > 0.9:
                     return "Elastic Collision"
                 elif ke_ratio > 0.5:
@@ -193,8 +216,14 @@ class PhysicsEngine:
         vel1_post = np.array(vel1_post)
         vel2_post = np.array(vel2_post)
 
-        ke_pre = 0.5 * m1 * np.linalg.norm(vel1_pre) ** 2 + 0.5 * m2 * np.linalg.norm(vel2_pre) ** 2
-        ke_post = 0.5 * m1 * np.linalg.norm(vel1_post) ** 2 + 0.5 * m2 * np.linalg.norm(vel2_post) ** 2
+        ke_pre = (
+            0.5 * m1 * np.linalg.norm(vel1_pre) ** 2
+            + 0.5 * m2 * np.linalg.norm(vel2_pre) ** 2
+        )
+        ke_post = (
+            0.5 * m1 * np.linalg.norm(vel1_post) ** 2
+            + 0.5 * m2 * np.linalg.norm(vel2_post) ** 2
+        )
 
         if ke_pre < 1e-6:
             return "Negligible Initial Energy"
@@ -208,7 +237,9 @@ class PhysicsEngine:
         else:
             return "Highly Inelastic"
 
-    def calculate_momentum_conservation(self, vel1_pre, vel2_pre, vel1_post, vel2_post, m1, m2):
+    def calculate_momentum_conservation(
+        self, vel1_pre, vel2_pre, vel1_post, vel2_post, m1, m2
+    ):
         """Check momentum conservation."""
         vel1_pre = np.array(vel1_pre)
         vel2_pre = np.array(vel2_pre)

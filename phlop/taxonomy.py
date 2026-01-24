@@ -1,9 +1,9 @@
 import numpy as np
-import mujoco
 from collections import deque
 
 from phlop.physics_engine import PhysicsEngine
 from phlop.utils import is_cylinder_upright
+
 
 class PhysicsTaxonomy:
     def __init__(self, objects):
@@ -77,12 +77,8 @@ class PhysicsTaxonomy:
 
             # Retrieve masses BEFORE detecting collision
             # This ensures collision label aligns with energy_analysis
-            mass1 = next(
-                (o["mass"] for o in self.objects if o["id"] == vel1_id), 1.0
-            )
-            mass2 = next(
-                (o["mass"] for o in self.objects if o["id"] == vel2_id), 1.0
-            )
+            mass1 = next((o["mass"] for o in self.objects if o["id"] == vel1_id), 1.0)
+            mass2 = next((o["mass"] for o in self.objects if o["id"] == vel2_id), 1.0)
 
             # Pass masses (m1, m2) to detect_collision so it uses energy as ground truth
             # This returns: "Elastic Collision", "Partially Inelastic Collision", or "Highly Inelastic Collision"
@@ -168,7 +164,9 @@ class PhysicsTaxonomy:
             }
         return None
 
-    def get_rotational_motions(self, angular_velocity, linear_velocity, radius, shape, model, data, object_id):
+    def get_rotational_motions(
+        self, angular_velocity, linear_velocity, radius, shape, model, data, object_id
+    ):
         """
         Detect rotational motion for any shape.
         Returns: Pure Rotation, Rolling Motion, Rolling with Slipping, or None
@@ -177,8 +175,18 @@ class PhysicsTaxonomy:
             upright = is_cylinder_upright(self.objects, model, data, object_id)
             if upright:
                 return None
-        
-        if shape in ["ball", "sphere", "cylinder"]:
+
+            rotational_motion = self.physics_engine.detect_rotational_motion(
+                angular_velocity, linear_velocity, radius
+            )
+            if rotational_motion:
+                return {
+                    "category": "Kinematic Events",
+                    "subcategory": "Rotational Motion",
+                    "labels": [rotational_motion],
+                }
+
+        if shape in ["ball", "sphere"]:
             rotational_motion = self.physics_engine.detect_rotational_motion(
                 angular_velocity, linear_velocity, radius
             )
@@ -191,8 +199,15 @@ class PhysicsTaxonomy:
         return None
 
     def environmental_interactions(
-        self, cur_velocity, prev_velocity, dt, friction_coefficient, shape=None,
-        model=None, data=None, object_id=None
+        self,
+        cur_velocity,
+        prev_velocity,
+        dt,
+        friction_coefficient,
+        shape=None,
+        model=None,
+        data=None,
+        object_id=None,
     ):
         """
         Detect friction effects.
@@ -201,7 +216,7 @@ class PhysicsTaxonomy:
         # Skip friction detection for balls
         if shape == "ball":
             return None
-        
+
         # cylinders, only detect friction if upright (on its end edge)
         if shape == "cylinder":
             upright = is_cylinder_upright(self.objects, model, data, object_id)
@@ -287,7 +302,13 @@ class PhysicsTaxonomy:
             # 3. Rotational motion
             radius = obj.get("dimensions", {}).get("radius", 0.1)
             rotational_motion = self.get_rotational_motions(
-                cur_angular_velocity, cur_velocity, radius, obj.get("shape", ""), model, data, object_id
+                cur_angular_velocity,
+                cur_velocity,
+                radius,
+                obj.get("shape", ""),
+                model,
+                data,
+                object_id,
             )
             if rotational_motion:
                 results[object_id].append(rotational_motion)
@@ -304,7 +325,7 @@ class PhysicsTaxonomy:
                 obj.get("shape", ""),
                 model=model,
                 data=data,
-                object_id=object_id
+                object_id=object_id,
             )
             if friction_event:
                 results[object_id].append(friction_event)
