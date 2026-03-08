@@ -22,6 +22,7 @@ dependencies = [
     "ruff",
     "pyarrow",
     "fastparquet",
+    "huggingface-hub>=1.3.4",
 ]
 
 [tool.setuptools.packages.find]

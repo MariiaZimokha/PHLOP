@@ -182,6 +182,104 @@ class AdvancedPhysicsQuestions:
 
                 yield i, obj1_id, obj2_id, cur_f
 
+    def _extract_events(self) -> Dict:
+        """
+        Pre-scan the entire video timeline to index collisions, sliding periods,
+        and stop events. Cached for fast reuse by question generators.
+        """
+        if getattr(self, "_events_cache", None) is not None:
+            return self._events_cache
+
+        collisions = []
+        for i, obj1_id, obj2_id, cur_f in self._iter_collisions():
+            collisions.append(
+                {
+                    "frame_idx": i,
+                    "obj1_id": obj1_id,
+                    "obj2_id": obj2_id,
+                    "time": cur_f.get("time", 0),
+                }
+            )
+        objects_in_collisions = set()
+        for c in collisions:
+            objects_in_collisions.add(c["obj1_id"])
+            objects_in_collisions.add(c["obj2_id"])
+
+        sliding_periods = []
+        stop_events = []
+        speed_threshold = 0.5
+        stop_speed = 0.05
+
+        for obj_id in self.appeared_obj_ids:
+            in_slide = False
+            slide_start_frame = None
+            slide_start_time = None
+            for i, frame in enumerate(self.frames):
+                obj_state = frame.get("objects", {}).get(obj_id)
+                if not obj_state:
+                    if in_slide:
+                        in_slide = False
+                        if slide_start_frame is not None and i - 1 > slide_start_frame:
+                            sliding_periods.append(
+                                {
+                                    "obj_id": obj_id,
+                                    "start_frame": slide_start_frame,
+                                    "end_frame": i - 1,
+                                    "start_time": slide_start_time,
+                                    "end_time": self.frames[i - 1].get("time", 0),
+                                }
+                            )
+                        slide_start_frame = slide_start_time = None
+                    continue
+                vel = self._get_velocity_from_obj_state(obj_state)
+                speed = self._get_speed_from_velocity(vel)
+                t = frame.get("time", 0)
+                if speed >= speed_threshold:
+                    if not in_slide:
+                        in_slide = True
+                        slide_start_frame = i
+                        slide_start_time = t
+                elif speed < stop_speed:
+                    stop_events.append({"obj_id": obj_id, "frame_idx": i, "time": t})
+                    if in_slide and slide_start_frame is not None and i > slide_start_frame:
+                        sliding_periods.append(
+                            {
+                                "obj_id": obj_id,
+                                "start_frame": slide_start_frame,
+                                "end_frame": i,
+                                "start_time": slide_start_time,
+                                "end_time": t,
+                            }
+                        )
+                    in_slide = False
+                    slide_start_frame = slide_start_time = None
+
+        objects_with_sliding = {p["obj_id"] for p in sliding_periods}
+        self._events_cache = {
+            "collisions": collisions,
+            "objects_in_collisions": objects_in_collisions,
+            "sliding_periods": sliding_periods,
+            "stop_events": stop_events,
+            "objects_with_sliding": objects_with_sliding,
+        }
+        return self._events_cache
+
+    def _is_uniquely_describable(self, obj_id: str) -> bool:
+        """
+        Return False if another appeared object has the same unique description
+        (e.g. two identical red cubes that cannot be disambiguated). Skip generating
+        questions for such objects to avoid confusing the model.
+        """
+        if obj_id not in self.appeared_obj_ids:
+            return False
+        desc = self._describe_object_unique(obj_id)
+        for oid in self.appeared_obj_ids:
+            if oid == obj_id:
+                continue
+            if self._describe_object_unique(oid) == desc:
+                return False
+        return True
+
     def _get_collision_velocities(
         self, frame_idx: int, obj1_id: str, obj2_id: str
     ) -> Optional[Dict]:
@@ -277,6 +375,8 @@ class AdvancedPhysicsQuestions:
         questions = []
 
         for i, obj1, obj2, cur_f in self._iter_collisions():
+            if not self._is_uniquely_describable(obj1) or not self._is_uniquely_describable(obj2):
+                continue
             prev_f = self.frames[i - 1]
             o1_data = prev_f["objects"].get(obj1, {})
             o2_data = prev_f["objects"].get(obj2, {})
@@ -374,6 +474,8 @@ class AdvancedPhysicsQuestions:
         questions = []
 
         for i, obj1, obj2, cur_f in self._iter_collisions():
+            if not self._is_uniquely_describable(obj1) or not self._is_uniquely_describable(obj2):
+                continue
             velocities = self._get_collision_velocities(i, obj1, obj2)
             if not velocities:
                 continue
@@ -425,13 +527,19 @@ class AdvancedPhysicsQuestions:
         return questions
 
     def generate_mass_effects_questions(self) -> List[Dict]:
-        """Mass Effects - 1-2 questions"""
+        """
+        Mass Effects - 1-2 questions.
+        Strictly limited to objects that collide (momentum transfer visible),
+        so the model has a visual signal to deduce mass rather than guessing.
+        """
         questions = []
+        events = self._extract_events()
+        objects_with_collisions = events["objects_in_collisions"]
 
         obj_masses = {}
         for obj in self.objects:
             obj_id = obj["id"]
-            if obj_id in self.appeared_obj_ids:
+            if obj_id in self.appeared_obj_ids and obj_id in objects_with_collisions:
                 obj_masses[obj_id] = float(obj.get("mass", 1.0))
 
         if len(obj_masses) < 2:
@@ -440,6 +548,9 @@ class AdvancedPhysicsQuestions:
         sorted_objs = sorted(obj_masses.items(), key=lambda x: x[1], reverse=True)
         heaviest_id, heaviest_mass = sorted_objs[0]
         lightest_id, lightest_mass = sorted_objs[-1]
+
+        if not self._is_uniquely_describable(heaviest_id) or not self._is_uniquely_describable(lightest_id):
+            return questions
 
         desc_heavy = self._describe_object_unique(heaviest_id)
         desc_light = self._describe_object_unique(lightest_id)
@@ -478,11 +589,19 @@ class AdvancedPhysicsQuestions:
         return questions
 
     def generate_friction_coefficient_questions(self) -> List[Dict]:
-        """Friction Coefficient - 1-2 questions"""
+        """
+        Friction Coefficient - 1-2 questions.
+        Restricted to objects that demonstrate sliding or deceleration;
+        does not ask about friction for purely stationary or flying objects.
+        """
         questions = []
+        events = self._extract_events()
+        objects_with_sliding = events["objects_with_sliding"]
 
         friction_data = {}
         for obj_id in self.appeared_obj_ids:
+            if obj_id not in objects_with_sliding:
+                continue
             props = self._get_object_properties(obj_id)
             if props:
                 friction_data[obj_id] = props["friction"]
@@ -495,6 +614,9 @@ class AdvancedPhysicsQuestions:
         )
         highest_id, highest_friction = sorted_friction[0]
         lowest_id, lowest_friction = sorted_friction[-1]
+
+        if not self._is_uniquely_describable(highest_id) or not self._is_uniquely_describable(lowest_id):
+            return questions
 
         desc_high = self._describe_object_unique(highest_id)
         desc_low = self._describe_object_unique(lowest_id)
@@ -626,71 +748,63 @@ class AdvancedPhysicsQuestions:
         return questions
 
     def generate_velocity_scaling_counterfactual_questions(self) -> List[Dict]:
-        """Velocity Counterfactuals - 1-2 questions"""
+        """
+        Velocity counterfactuals: direction of change (e.g. would it slide farther?)
+        rather than exact distances. Uses event-driven sliding periods.
+        """
         questions = []
+        events = self._extract_events()
+        sliding_periods = events["sliding_periods"]
 
-        for obj_id in self.appeared_obj_ids:
-            # Find sliding event with high initial velocity
-            for i, frame in enumerate(self.frames):
-                obj_state = frame.get("objects", {}).get(obj_id)
-                if not obj_state:
-                    continue
+        for period in sliding_periods:
+            obj_id = period["obj_id"]
+            if not self._is_uniquely_describable(obj_id):
+                continue
+            start_frame = period["start_frame"]
+            start_time = period["start_time"]
+            frame = self.frames[start_frame]
+            obj_state = frame.get("objects", {}).get(obj_id)
+            if not obj_state:
+                continue
+            vel = self._get_velocity_from_obj_state(obj_state)
+            speed = self._get_speed_from_velocity(vel)
+            if speed < 0.5:
+                continue
 
-                vel = self._get_velocity_from_obj_state(obj_state)
-                speed = self._get_speed_from_velocity(vel)
+            desc = self._describe_object_unique(obj_id)
 
-                if speed > 1.0:  # Significant speed
-                    # Check if object eventually stops
-                    total_distance = 0
-                    stopped_frame = None
-                    for j in range(i, min(i + 30, len(self.frames))):
-                        future_frame = self.frames[j]
-                        future_state = future_frame.get("objects", {}).get(obj_id)
-                        if future_state:
-                            future_vel = self._get_velocity_from_obj_state(future_state)
-                            future_speed = self._get_speed_from_velocity(future_vel)
-                            if future_speed < 0.05:
-                                stopped_frame = j
-                                break
+            # Direction-of-change: double velocity → slide farther (avoid exact coordinates)
+            options = [
+                "Yes, it would slide farther.",
+                "No, it would slide the same distance.",
+                "No, it would slide less.",
+                "Cannot determine.",
+            ]
+            shuffled = self._shuffle_options(options)
 
-                    if stopped_frame and stopped_frame > i:
-                        desc = self._describe_object_unique(obj_id)
-                        t = frame.get("time", 0)
-
-                        # Q: Velocity scaling (quadratic relationship)
-                        options = [
-                            "4 times farther (quadratic)",
-                            "2 times farther (linear)",
-                            "Same distance (independent)",
-                            "Half the distance",
-                        ]
-                        shuffled = self._shuffle_options(options)
-
-                        questions.append(
-                            {
-                                "question": (
-                                    f"At t={t:.2f}s, {desc} has velocity {speed:.2f} m/s. "
-                                    f"If the initial velocity doubled, how much farther would it slide "
-                                    f"(assuming same friction)?"
-                                ),
-                                "options": shuffled,
-                                "answer": "4 times farther (quadratic)",
-                                "answer_type": "multiple_choice",
-                                "difficulty": "hard",
-                                "category": "Counterfactual Reasoning",
-                                "question_type": "velocity_scaling",
-                                "rationale": (
-                                    "Stopping distance d = v^2/(2*μ*g). If v doubles, d becomes (2v)^2/(2*μ*g) = 4v^2/(2*μ*g) = 4d."
-                                ),
-                                "physics_signals": {
-                                    "initial_velocity": round(speed, 2),
-                                    "scaling_factor": 4,
-                                },
-                            }
-                        )
-
-                        if len(questions) >= 1:
-                            return questions
+            questions.append(
+                {
+                    "question": (
+                        f"At t={start_time:.2f}s, {desc} has velocity {speed:.2f} m/s and then slides to a stop. "
+                        f"If the initial velocity were doubled (same friction), would it slide farther?"
+                    ),
+                    "options": shuffled,
+                    "answer": "Yes, it would slide farther.",
+                    "answer_type": "multiple_choice",
+                    "difficulty": "hard",
+                    "category": "Counterfactual Reasoning",
+                    "question_type": "velocity_scaling",
+                    "rationale": (
+                        "Stopping distance d = v²/(2μg). If v doubles, d increases by a factor of 4. "
+                        "Direction of change: higher v → farther slide."
+                    ),
+                    "physics_signals": {
+                        "initial_velocity": round(speed, 2),
+                        "scaling_factor": 4,
+                    },
+                }
+            )
+            return questions
 
         return questions
 
@@ -946,74 +1060,58 @@ class AdvancedPhysicsQuestions:
 
     def generate_counterfactual_questions(self) -> List[Dict]:
         """
-        Counterfactual reasoning grounded in friction taxonomy.
+        Counterfactual reasoning grounded in friction/sliding. Focus on direction of
+        change (e.g. would it stop sooner?) rather than exact coordinates.
+        Only objects that actually slide are used; uniquely describable only.
         """
         questions = []
+        events = self._extract_events()
+        sliding_periods = events["sliding_periods"]
 
-        for obj in self.objects:
-            obj_id = obj["id"]
-
-            # Only process objects that appeared in frames
-            if obj_id not in self.appeared_obj_ids:
+        for period in sliding_periods:
+            obj_id = period["obj_id"]
+            duration = period["end_time"] - period["start_time"]
+            if duration < 0.1:
+                continue
+            if not self._is_uniquely_describable(obj_id):
                 continue
 
-            slide_start = None
+            obj_desc = self._describe_object_unique(obj_id)
 
-            for frame in self.frames:
-                obj_state = frame["objects"].get(obj_id)
-                if not obj_state:
-                    continue
+            # Direction-of-change: higher friction → stop sooner
+            options = [
+                "It would stop sooner.",
+                "It would slide for the same duration.",
+                "It would slide longer.",
+                "It would never stop.",
+            ]
+            shuffled_options = self._shuffle_options(options)
 
-                friction_tax = self._get_taxonomy(
-                    obj_state, "Environmental Interactions", "Friction"
-                )
-
-                labels = [l for t in friction_tax for l in t.get("labels", [])]
-
-                if "Sliding with Friction" in labels and slide_start is None:
-                    slide_start = frame["time"]
-
-                if "Friction Stop" in labels and slide_start is not None:
-                    stop_time = frame["time"]
-                    duration = stop_time - slide_start
-
-                    if duration > 0.1:
-                        # Get object description (e.g., "red ball", "blue cube")
-                        obj_desc = self._describe_object_unique(obj_id)
-
-                        options = [
-                            "It would stop in roughly half the time.",
-                            "It would slide for the same duration.",
-                            "It would slide longer.",
-                            "It would never stop.",
-                        ]
-                        shuffled_options = self._shuffle_options(options)
-
-                        questions.append(
-                            {
-                                "question": (
-                                    f"A {obj_desc} slides for {duration:.2f}s before stopping. "
-                                    f"If the friction coefficient were doubled, "
-                                    f"what would most likely happen?"
-                                ),
-                                "options": shuffled_options,
-                                "answer": "It would stop in roughly half the time.",
-                                "answer_type": "multiple_choice",
-                                "difficulty": "hard",
-                                "category": "Counterfactual Reasoning",
-                                "question_type": "friction_scaling",
-                                "rationale": (
-                                    "Stopping time under kinetic friction scales inversely "
-                                    "with the friction coefficient: t = v / (μ * g)"
-                                ),
-                                "physics_signals": {
-                                    "slide_duration": duration,
-                                    "friction_event": True,
-                                },
-                            }
-                        )
-
-                    slide_start = None
+            questions.append(
+                {
+                    "question": (
+                        f"A {obj_desc} slides for {duration:.2f}s before stopping. "
+                        f"If the friction coefficient were doubled, would it slide "
+                        f"farther or stop sooner?"
+                    ),
+                    "options": shuffled_options,
+                    "answer": "It would stop sooner.",
+                    "answer_type": "multiple_choice",
+                    "difficulty": "hard",
+                    "category": "Counterfactual Reasoning",
+                    "question_type": "friction_scaling",
+                    "rationale": (
+                        "Stopping time under kinetic friction scales inversely "
+                        "with the friction coefficient: t = v / (μ * g). "
+                        "Higher μ → stop sooner (direction of change)."
+                    ),
+                    "physics_signals": {
+                        "slide_duration": duration,
+                        "friction_event": True,
+                    },
+                }
+            )
+            return questions
 
         return questions
 
@@ -1048,6 +1146,8 @@ class AdvancedPhysicsQuestions:
                 obj2_id = self._geom_id_to_obj_id(g2)
 
                 if obj1_id not in obj_properties or obj2_id not in obj_properties:
+                    continue
+                if not self._is_uniquely_describable(obj1_id) or not self._is_uniquely_describable(obj2_id):
                     continue
 
                 # Calculate post-collision distances traveled
