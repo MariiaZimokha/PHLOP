@@ -29,6 +29,7 @@ Usage (from notebooks/ or with this path on PYTHONPATH):
     # Use sample with any model: load video/qa/metadata in your own code.
 """
 
+import shutil
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -50,6 +51,7 @@ class PHLOPDataset:
         extract_root: Optional[Union[str, Path]] = None,
         repo_type: str = "dataset",
         token: Optional[Union[str, bool]] = None,
+        keep_n_shards: int = 1,
     ):
         """
         Args:
@@ -58,6 +60,8 @@ class PHLOPDataset:
             extract_root: Directory for extracted shards. Defaults to ~/.cache/phlop_shards.
             repo_type: "dataset" or "model".
             token: Hugging Face token for private repos (True = use cached login).
+            keep_n_shards: Max extracted shards to keep on disk. Oldest are removed
+                           when this limit is exceeded. Set 0 to keep all (no cleanup).
         """
         self.ds = hf_dataset
         self.repo_id = repo_id
@@ -65,19 +69,32 @@ class PHLOPDataset:
         self.token = token
         self.extract_root = Path(extract_root or _default_extract_root())
         self.extract_root.mkdir(parents=True, exist_ok=True)
+        self.keep_n_shards = keep_n_shards
         self._loaded_shards: dict[str, Path] = {}
+        self._shard_order: list[str] = []
+
+    def _cleanup_old_shards(self) -> None:
+        """Remove oldest extracted shards to stay within keep_n_shards limit."""
+        if self.keep_n_shards <= 0:
+            return
+        while len(self._shard_order) > self.keep_n_shards:
+            oldest = self._shard_order.pop(0)
+            old_dir = self._loaded_shards.pop(oldest, None)
+            if old_dir and old_dir.exists():
+                shutil.rmtree(old_dir, ignore_errors=True)
 
     def _ensure_shard_extracted(self, shard_file: str) -> Path:
         """Download zip if needed and extract; return path to extracted root."""
         if shard_file in self._loaded_shards:
             return self._loaded_shards[shard_file]
 
-        # e.g. "data/val/val_shard_0000.zip" -> "val_shard_0000"
         shard_name = Path(shard_file).stem
         extract_dir = self.extract_root / shard_name
 
         if extract_dir.exists() and any(extract_dir.iterdir()):
             self._loaded_shards[shard_file] = extract_dir
+            self._shard_order.append(shard_file)
+            self._cleanup_old_shards()
             return extract_dir
 
         zip_path = hf_hub_download(
@@ -93,6 +110,8 @@ class PHLOPDataset:
             z.extractall(extract_dir)
 
         self._loaded_shards[shard_file] = extract_dir
+        self._shard_order.append(shard_file)
+        self._cleanup_old_shards()
         return extract_dir
 
     def _resolve_path(self, root: Path, path_str: str) -> Path:

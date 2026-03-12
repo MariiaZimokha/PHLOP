@@ -665,7 +665,10 @@ def compute_metrics(results: list) -> dict:
         p = physics_signal_accuracy(r["prediction"], r["target"])
         if p is not None:
             phys_scores.append(p)
-        gt_tax = flatten_taxonomy(r["metadata"])
+        if "taxonomy_labels" in r:
+            gt_tax = set(r["taxonomy_labels"])
+        else:
+            gt_tax = flatten_taxonomy(r.get("metadata", {}))
         pred_tax = extract_predicted_physics_labels(r["prediction"])
         tax_scores.append(taxonomy_f1(pred_tax, gt_tax))
     by_type: dict[str, dict] = {}
