@@ -54,6 +54,27 @@ from phlop_eval_common import (
 
 NUM_VIDEO_FRAMES = 8
 
+def _get_device() -> str:
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def _best_dtype(device: str) -> torch.dtype:
+    """bfloat16 has poor MPS kernel coverage; use float16 there."""
+    if device == "mps":
+        return torch.float16
+    return torch.bfloat16
+
+
+def _empty_device_cache(device: str) -> None:
+    if device == "cuda" or (isinstance(device, torch.device) and device.type == "cuda"):
+        torch.cuda.empty_cache()
+    elif device == "mps" or (isinstance(device, torch.device) and device.type == "mps"):
+        torch.mps.empty_cache()
+
 
 def _load_video_as_pil(
     video_path: str, num_frames: int = NUM_VIDEO_FRAMES,
@@ -107,10 +128,38 @@ def _load_video_as_pil(
         return [], empty_info
 
 
-def _format_physics_signals(signals: dict) -> str:
-    if not signals:
-        return "None"
-    return "\n".join(f"- {k}: {v}" for k, v in signals.items())
+
+def _build_prompt(question: str, video_info: dict, physical_props: dict = None) -> str:
+    """Build the prompt string, optionally including physical properties."""
+    duration = video_info.get("duration", 0.0)
+    fps = video_info.get("fps", 25.0)
+    n_frames = len(video_info.get("frames_indices", []))
+
+    props_section = ""
+    if physical_props:
+        props_lines = "\n".join(
+            f"- {v['color']} {v['shape']}: mass={v['mass']}, friction={v['friction'][0]:.2f}"
+            for v in physical_props.values()
+        )
+        props_section = f"\nObject properties:\n{props_lines}\n"
+
+    return (
+        "You are a physics reasoning system.\n"
+        "Watch the video and answer the question.\n\n"
+        f"Video details:\n"
+        f"- Duration: {duration:.1f} seconds\n"
+        f"- FPS: {fps:.0f}\n"
+        f"- Frames sampled: {n_frames}\n"
+        f"{props_section}\n"
+        "<video>\n\n"
+        f"Question:\n{question}\n\n"
+        "Respond with ONLY the final answer:\n"
+        "- yes/no questions: answer \"yes\" or \"no\"\n"
+        "- counting questions: answer with a number\n"
+        "- time questions: answer like \"0.5s\"\n"
+        "- multiple choice: pick exactly one option\n\n"
+        "Answer:\n"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -128,10 +177,12 @@ class PHLOPTrainDataset(Dataset):
         difficulty_filter: Optional[list[str]] = None,
         camera_mode: str = "static",
         num_frames: int = NUM_VIDEO_FRAMES,
+        use_physics: bool = False,
     ):
         self.base = base_dataset
         self.camera_mode = camera_mode
         self.num_frames = num_frames
+        self.use_physics = use_physics
         self.difficulty_filter = None if difficulty_filter is None else set(d.lower() for d in difficulty_filter)
         self.index = []
         print(f"  Building training index (camera={camera_mode}, difficulty={difficulty_filter})...")
@@ -163,7 +214,6 @@ class PHLOPTrainDataset(Dataset):
         qa_path = (sample.get("qa") or {}).get(cam)
 
         metadata = load_json_file(meta_path)
-        physical_props = get_physical_props(metadata)
         qa_list = load_qa_from_path(qa_path)
         qa_entry = qa_list[qa_idx] if qa_idx < len(qa_list) else {}
 
@@ -177,17 +227,9 @@ class PHLOPTrainDataset(Dataset):
             opts = "\n".join(f"- {o}" for o in qa_entry["options"])
             question = f"{question}\nOptions:\n{opts}"
 
-        physics_text = _format_physics_signals(qa_entry.get("physics_signals", {}))
-        prompt = (
-            "You are a physics reasoning system.\n\n"
-            "Known physical setup:\n"
-            f"{_format_physics_signals(physical_props)}\n\n"
-            "<video>\n\n"
-            f"Question:\n{question}\n\n"
-            "Respond in the following format:\n"
-            "Physics:\n- <key>: <value>\nAnswer:\n"
-        )
-        target = "Physics:\n" + physics_text + "\n\nAnswer:\n" + str(answer)
+        physics = get_physical_props(metadata) if self.use_physics else None
+        prompt = _build_prompt(question, video_info, physics)
+        target = str(answer)
 
         return {
             "video": video_frames,
@@ -203,10 +245,11 @@ class PHLOPValDataset(Dataset):
     """Eval dataset: one sample per (scene, question) — all questions are evaluated.
     Works with PHLOPDataset backends (path-based)."""
 
-    def __init__(self, base_dataset, camera_mode: str = "static", num_frames: int = NUM_VIDEO_FRAMES):
+    def __init__(self, base_dataset, camera_mode: str = "static", num_frames: int = NUM_VIDEO_FRAMES, use_physics: bool = False):
         self.base = base_dataset
         self.camera_mode = camera_mode
         self.num_frames = num_frames
+        self.use_physics = use_physics
         self.index = []
         print(f"  Building eval index (camera={camera_mode})...")
         for scene_idx in tqdm(range(len(self.base)), desc="Indexing eval scenes"):
@@ -257,17 +300,9 @@ class PHLOPValDataset(Dataset):
             opts = "\n".join(f"- {o}" for o in qa_entry["options"])
             question = f"{question}\nOptions:\n{opts}"
 
-        physics_text = _format_physics_signals(qa_entry.get("physics_signals", {}))
-        prompt = (
-            "You are a physics reasoning system.\n"
-            "First infer the physical properties and events.\n"
-            "Then answer the question.\n\n"
-            "<video>\n\n"
-            f"Question:\n{question}\n\n"
-            "Respond in the following format:\n"
-            "Physics:\n- <key>: <value>\nAnswer:\n"
-        )
-        target = "Physics:\n" + physics_text + "\n\nAnswer:\n" + str(answer)
+        physics = get_physical_props(metadata) if self.use_physics else None
+        prompt = _build_prompt(question, video_info, physics)
+        target = str(answer)
 
         return {
             "video": video_frames,
@@ -299,17 +334,47 @@ def _build_video_metadata(video_info: dict) -> VideoMetadata:
 
 
 FLUSH_BATCH_SIZE = 500
+INFERENCE_BATCH_SIZE = 4
 
 
-def collect_predictions_smolvlm(model, processor, dataset, max_samples=None, device=None):
+def _prepare_batch_items(dataset, indices):
+    """Load a batch of items from dataset, skipping failures."""
+    items = []
+    for i in indices:
+        try:
+            item = dataset[i]
+        except (ValueError, KeyError, FileNotFoundError) as e:
+            print(f"  Skipping idx {i}: {e}")
+            continue
+        if not item.get("video"):
+            print(f"  Skipping idx {i}: no video frames loaded")
+            continue
+        items.append((i, item))
+    return items
+
+
+def collect_predictions_smolvlm(
+    model, processor, dataset, max_samples=None, device=None,
+    batch_size: int = INFERENCE_BATCH_SIZE,
+    max_new_tokens: int = 64,
+):
     """Run model on dataset, return list of result dicts.
 
     Results are flushed to temporary batch files every FLUSH_BATCH_SIZE items
     to keep RAM usage bounded, then merged at the end.
+
+    Args:
+        batch_size: Number of samples per forward pass (default 4). Increase
+                    if GPU memory allows; set to 1 to match old behaviour.
+        max_new_tokens: Maximum tokens to generate (default 64). Most PHLOP
+                        answers are very short; 64 is plenty and ~2x faster
+                        than the old default of 128.
     """
     model.eval()
     if device is None:
-        device = next(model.parameters()).device
+        device = str(next(model.parameters()).device)
+    device_str = str(device)
+    model_dtype = _best_dtype(device_str)
     n = len(dataset) if max_samples is None else min(len(dataset), max_samples)
 
     tmp_dir = tempfile.mkdtemp(prefix="smolvlm_batches_")
@@ -326,61 +391,68 @@ def collect_predictions_smolvlm(model, processor, dataset, max_samples=None, dev
         buffer.clear()
         gc.collect()
 
-    for i in tqdm(range(n), desc="Collecting predictions"):
-        try:
-            item = dataset[i]
-        except (ValueError, KeyError, FileNotFoundError) as e:
-            print(f"  Skipping idx {i}: {e}")
+    for batch_start in tqdm(range(0, n, batch_size), desc="Collecting predictions"):
+        batch_indices = list(range(batch_start, min(batch_start + batch_size, n)))
+        batch_items = _prepare_batch_items(dataset, batch_indices)
+        if not batch_items:
             continue
-        if not item.get("video"):
-            print(f"  Skipping idx {i}: no video frames loaded")
-            continue
-        vm = _build_video_metadata(item.get("video_info", {}))
+
+        videos = []
+        texts = []
+        video_metas = []
+        for _, item in batch_items:
+            vm = _build_video_metadata(item.get("video_info", {}))
+            videos.append([item["video"]])
+            texts.append(item["prompt"])
+            video_metas.append([vm])
+
         inputs = processor(
-            videos=[[item["video"]]],
-            text=[item["prompt"]],
-            video_metadata=[[vm]],
+            videos=videos,
+            text=texts,
+            video_metadata=video_metas,
             return_tensors="pt",
             padding=True,
         )
         inputs = {k: v.to(device) for k, v in inputs.items()}
         if "pixel_values" in inputs:
-            inputs["pixel_values"] = inputs["pixel_values"].to(torch.bfloat16)
+            inputs["pixel_values"] = inputs["pixel_values"].to(model_dtype)
+
         with torch.no_grad():
-            outputs = model.generate(**inputs, max_new_tokens=128)
-        pred = processor.batch_decode(outputs, skip_special_tokens=True)[0]
+            outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        preds = processor.batch_decode(outputs, skip_special_tokens=True)
 
         del inputs, outputs
-        torch.cuda.empty_cache()
+        _empty_device_cache(device_str)
 
-        qa = item.get("qa_entry") or {}
-        answer_raw = qa.get("answer", "")
-        if isinstance(answer_raw, list):
-            answer_str = ", ".join(str(a) for a in answer_raw)
-        else:
-            answer_str = str(answer_raw)
+        for pred, (orig_idx, item) in zip(preds, batch_items):
+            qa = item.get("qa_entry") or {}
+            answer_raw = qa.get("answer", "")
+            if isinstance(answer_raw, list):
+                answer_str = ", ".join(str(a) for a in answer_raw)
+            else:
+                answer_str = str(answer_raw)
 
-        tax_labels = list(flatten_taxonomy(item.get("metadata", {})))
+            tax_labels = list(flatten_taxonomy(item.get("metadata", {})))
 
-        buffer.append({
-            "idx": i,
-            "scene_idx": item.get("scene_idx"),
-            "qa_idx": item.get("qa_idx"),
-            "video_path": item.get("video_path", ""),
-            "camera_mode": item.get("camera_mode", ""),
-            "prompt": item["prompt"],
-            "question": qa.get("question", ""),
-            "options": qa.get("options"),
-            "difficulty": qa.get("difficulty", "unknown"),
-            "question_type": qa.get("question_type") or qa.get("category") or "unknown",
-            "category": qa.get("category") or "unknown",
-            "true_answer": answer_str,
-            "prediction": pred,
-            "target": item["target"],
-            "taxonomy_labels": tax_labels,
-            "physics_signals": qa.get("physics_signals", {}),
-        })
-        del item
+            buffer.append({
+                "idx": orig_idx,
+                "scene_idx": item.get("scene_idx"),
+                "qa_idx": item.get("qa_idx"),
+                "video_path": item.get("video_path", ""),
+                "camera_mode": item.get("camera_mode", ""),
+                "prompt": item["prompt"],
+                "question": qa.get("question", ""),
+                "options": qa.get("options"),
+                "difficulty": qa.get("difficulty", "unknown"),
+                "question_type": qa.get("question_type") or qa.get("category") or "unknown",
+                "category": qa.get("category") or "unknown",
+                "true_answer": answer_str,
+                "prediction": pred,
+                "target": item["target"],
+                "taxonomy_labels": tax_labels,
+                "physics_signals": qa.get("physics_signals", {}),
+            })
+            del item
 
         if len(buffer) >= FLUSH_BATCH_SIZE:
             _flush()
@@ -439,50 +511,75 @@ def run_zero_shot_smolvlm(
     device: Optional[str] = None,
     results_dir: Optional[str] = "results",
     eval_splits: Optional[list[str]] = None,
+    compile_model: bool = False,
+    batch_size: int = INFERENCE_BATCH_SIZE,
+    max_new_tokens: int = 64,
+    num_frames: int = NUM_VIDEO_FRAMES,
+    use_physics: bool = False,
 ) -> dict[str, dict]:
     """Run zero-shot SmolVLM on the requested splits.
 
     Args:
-        eval_splits: Which splits to evaluate. Defaults to ["validation", "test"].
+        eval_splits: Which splits to evaluate. Defaults to ["test"].
                      Pass e.g. ["validation"] to run a single split.
+        compile_model: Use torch.compile() for potential speedup (requires PyTorch 2.4+).
+        batch_size: Samples per forward pass. Increase for more GPU utilisation.
+        max_new_tokens: Max generated tokens per sample (default 64).
+        num_frames: Video frames to sample (default 8). Reducing to 4 roughly
+                    halves vision-encoder time at some accuracy cost.
+        use_physics: Include physical properties in the prompt.
 
     Returns dict[split_name, {"metrics": ..., "n_questions": ...}].
     Saves raw predictions to results_dir if set.
     """
-    eval_splits = eval_splits or ["validation", "test"]
+    eval_splits = eval_splits or ["test"]
+    physics_tag = "with_physics" if use_physics else "no_physics"
     available = [s for s in eval_splits if s in splits]
     if not available:
         print(f"None of {eval_splits} found in splits.")
         return {}
+    if device is None:
+        device = _get_device()
+    dtype = _best_dtype(device)
     if processor is None:
         processor = AutoProcessor.from_pretrained(SMOLVLM_MODEL_ID)
+    processor.tokenizer.padding_side = "left"
     if model is None:
         model = AutoModelForImageTextToText.from_pretrained(
             SMOLVLM_MODEL_ID,
-            dtype=torch.bfloat16,
+            dtype=dtype,
         )
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        if torch.backends.mps.is_available():
-            device = "mps"
     if results_dir:
         os.makedirs(results_dir, exist_ok=True)
-    print(f"Using device: {device}")
+    print(f"Using device: {device} (dtype={dtype}, frames={num_frames}, physics={use_physics})")
+
     model = model.to(device)
+
+    if compile_model:
+        try:
+            model = torch.compile(model)
+            print("  torch.compile() applied")
+        except Exception as e:
+            print(f"  torch.compile() failed, continuing without: {e}")
     out = {}
     for split_name in available:
-        val_ds = PHLOPValDataset(splits[split_name], camera_mode=camera_mode)
+        val_ds = PHLOPValDataset(splits[split_name], camera_mode=camera_mode, num_frames=num_frames, use_physics=use_physics)
         n_eval = len(val_ds) if max_samples is None else min(max_samples, len(val_ds))
-        print(f"\n--- Zero-shot on {split_name} ({camera_mode}): {len(val_ds)} questions (evaluating {n_eval}) ---")
-        results = collect_predictions_smolvlm(model, processor, val_ds, max_samples=max_samples, device=device)
+        print(f"\n--- Zero-shot on {split_name} ({camera_mode}, {physics_tag}): {len(val_ds)} questions (evaluating {n_eval}) ---")
+        results = collect_predictions_smolvlm(
+            model, processor, val_ds,
+            max_samples=max_samples, device=device,
+            batch_size=batch_size, max_new_tokens=max_new_tokens,
+        )
         for r in results:
             r["split"] = split_name
             r["camera_mode"] = camera_mode
+            r["use_physics"] = use_physics
         metrics = compute_metrics(results)
-        print_metrics(metrics, f"Zero-shot {split_name}")
+        print_metrics(metrics, f"Zero-shot {split_name} ({physics_tag})")
         out[split_name] = {"metrics": metrics, "n_questions": len(results)}
         if results_dir:
-            pred_path = os.path.join(results_dir, f"smolvlm_zero_shot_predictions_{split_name}_{camera_mode}.json")
+            pred_path = os.path.join(results_dir, f"smolvlm_zero_shot_predictions_{split_name}_{camera_mode}_{physics_tag}.json")
             with open(pred_path, "w") as f:
                 json.dump(results, f, indent=2, default=str)
             print(f"  Saved {len(results)} predictions to {pred_path}")
@@ -495,12 +592,15 @@ def run_finetune_smolvlm(
     config_name: Optional[str] = None,
     max_steps: int = 50,
     camera_mode: str = "static",
+    use_physics: bool = False,
 ) -> list[str]:
     """Fine-tune SmolVLM on train split. config_name=None runs all four configs. Returns list of checkpoint dirs."""
     if "train" not in splits:
         print("Need train split for fine-tuning.")
         return []
+    physics_tag = "with_physics" if use_physics else "no_physics"
     processor = AutoProcessor.from_pretrained(SMOLVLM_MODEL_ID)
+    processor.tokenizer.padding_side = "left"
     lora_config = LoraConfig(
         r=16,
         lora_alpha=16,
@@ -516,38 +616,50 @@ def run_finetune_smolvlm(
     saved_dirs = []
     for cfg_name, cfg in configs.items():
         print(f"\n{'='*60}")
-        print(f"Fine-tuning config: {cfg_name}")
+        print(f"Fine-tuning config: {cfg_name} ({physics_tag})")
         train_diff = cfg["train_difficulty"]
         val_diff = get_val_difficulty_filter(train_diff) if cfg["val_on_rest"] else None
         print(f"  Train difficulties: {train_diff}, Val difficulties: {val_diff}")
 
-        train_ds = PHLOPTrainDataset(train_backend, difficulty_filter=train_diff, camera_mode=camera_mode)
+        train_ds = PHLOPTrainDataset(train_backend, difficulty_filter=train_diff, camera_mode=camera_mode, use_physics=use_physics)
         if len(train_ds) == 0:
             print(f"  Skipping config {cfg_name}: no training samples.")
             continue
         if cfg["val_on_rest"] and val_backend is not None:
-            val_ds = PHLOPTrainDataset(val_backend, difficulty_filter=val_diff, camera_mode=camera_mode)
+            val_ds = PHLOPTrainDataset(val_backend, difficulty_filter=val_diff, camera_mode=camera_mode, use_physics=use_physics)
         else:
-            val_ds = PHLOPValDataset(val_backend, camera_mode=camera_mode)
+            val_ds = PHLOPValDataset(val_backend, camera_mode=camera_mode, use_physics=use_physics)
 
+        device = _get_device()
+        dtype = _best_dtype(device)
         model = AutoModelForImageTextToText.from_pretrained(
             SMOLVLM_MODEL_ID,
-            dtype=torch.bfloat16,
+            dtype=dtype,
         )
         model = get_peft_model(model, lora_config)
         model.print_trainable_parameters()
-        ckpt_dir = os.path.join(output_dir, cfg_name)
+        ckpt_dir = os.path.join(output_dir, f"{cfg_name}_{physics_tag}")
+        use_bf16 = (device != "mps")
+        use_fp16 = (device == "mps")
         training_args = TrainingArguments(
             output_dir=ckpt_dir,
             per_device_train_batch_size=1,
-            gradient_accumulation_steps=8,
-            learning_rate=2e-4,
+            gradient_accumulation_steps=16,
+            learning_rate=1e-4,
             max_steps=max_steps,
-            bf16=True,
+            lr_scheduler_type="cosine",
+            warmup_ratio=0.1,
+            weight_decay=0.01,
+            bf16=use_bf16,
+            fp16=use_fp16,
             logging_steps=10,
-            save_steps=500,
+            save_steps=100,
+            save_total_limit=2,
             eval_strategy="steps",
-            eval_steps=20,
+            eval_steps=100,
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_loss",
+            greater_is_better=False,
             remove_unused_columns=False,
             report_to="none",
         )
@@ -559,10 +671,11 @@ def run_finetune_smolvlm(
             data_collator=data_collator,
         )
         trainer.train()
-        trainer.save_model()
+        trainer.save_model(ckpt_dir)
+        print(f"  Model saved to: {ckpt_dir}")
         saved_dirs.append(ckpt_dir)
         del model
-        torch.cuda.empty_cache()
+        _empty_device_cache(device)
     return saved_dirs
 
 
@@ -572,45 +685,46 @@ def run_test_comparison_smolvlm(
     camera_mode: str = "static",
     results_dir: Optional[str] = "results",
     eval_splits: Optional[list[str]] = None,
+    use_physics: bool = False,
 ) -> list[tuple[str, dict]]:
     """Evaluate each (model_name, checkpoint_path) on specified splits.
     Returns list of (model_name, metrics_dict) where metrics_dict is keyed by split name.
     Defaults to test-only to avoid leaking validation signal used during training."""
     eval_splits = eval_splits or ["test"]
+    physics_tag = "with_physics" if use_physics else "no_physics"
     available = [s for s in eval_splits if s in splits]
     if not available:
         print(f"None of {eval_splits} found in splits.")
         return []
     processor = AutoProcessor.from_pretrained(SMOLVLM_MODEL_ID)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    if torch.backends.mps.is_available():
-        device = "mps"
+    processor.tokenizer.padding_side = "left"
+    device = _get_device()
+    dtype = _best_dtype(device)
     if results_dir:
         os.makedirs(results_dir, exist_ok=True)
     table = []
     for model_name, ckpt in model_checkpoints:
-        print(f"\n--- {model_name} ({camera_mode}) ---")
-        model = AutoModelForImageTextToText.from_pretrained(ckpt, dtype=torch.bfloat16)
+        print(f"\n--- {model_name} ({camera_mode}, {physics_tag}) ---")
+        model = AutoModelForImageTextToText.from_pretrained(ckpt, dtype=dtype)
         model = model.to(device)
         model_metrics = {}
         for split_name in available:
-            ds = PHLOPValDataset(splits[split_name], camera_mode=camera_mode)
+            ds = PHLOPValDataset(splits[split_name], camera_mode=camera_mode, use_physics=use_physics)
             results = collect_predictions_smolvlm(model, processor, ds, device=device)
             for r in results:
                 r["split"] = split_name
                 r["camera_mode"] = camera_mode
                 r["model"] = model_name
+                r["use_physics"] = use_physics
             metrics = compute_metrics(results)
             model_metrics[split_name] = metrics
-            print(f"  {split_name}: answer_acc={metrics['answer_accuracy']:.4f}, "
-                  f"physics_acc={metrics['physics_signal_accuracy']:.4f}, "
-                  f"tax_f1={metrics['taxonomy_f1']:.4f}")
+            print(f"  {split_name}: answer_acc={metrics['answer_accuracy']:.4f}")
             if results_dir:
-                out_path = os.path.join(results_dir, f"smolvlm_finetuned_predictions_{model_name}_{split_name}_{camera_mode}.json")
+                out_path = os.path.join(results_dir, f"smolvlm_finetuned_predictions_{model_name}_{split_name}_{camera_mode}_{physics_tag}.json")
                 with open(out_path, "w") as f:
                     json.dump(results, f, indent=2, default=str)
                 print(f"    Saved {len(results)} predictions to {out_path}")
         table.append((model_name, model_metrics))
         del model
-        torch.cuda.empty_cache()
+        _empty_device_cache(device)
     return table

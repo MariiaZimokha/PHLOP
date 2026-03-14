@@ -302,7 +302,7 @@ def build_dynamic_prompt(
     options: list = None,
     explanation: str = None,
     num_frames: int = 32,
-    video_duration: float = 15.0,
+    video_duration: float = 6.0,
     fps: int = 25,
 ) -> str:
     """
@@ -607,23 +607,6 @@ def answer_accuracy(pred: str, gt: str) -> int:
     return int(extract_answer(gt) in extract_answer(pred))
 
 
-def extract_physics_kv(text: str) -> dict:
-    physics = {}
-    for line in text.lower().splitlines():
-        if line.startswith("-") and ":" in line:
-            k, v = line[1:].split(":", 1)
-            physics[k.strip()] = v.strip()
-    return physics
-
-
-def physics_signal_accuracy(pred_text: str, gt_text: str) -> Optional[float]:
-    gt = extract_physics_kv(gt_text)
-    pred = extract_physics_kv(pred_text)
-    if not gt:
-        return None
-    correct = sum(1 for k, v in gt.items() if k in pred and v in pred[k])
-    return correct / len(gt)
-
 
 def flatten_taxonomy(metadata: dict) -> set:
     labels = set()
@@ -634,13 +617,6 @@ def flatten_taxonomy(metadata: dict) -> set:
                     labels.add(label.lower())
     return labels
 
-
-def extract_predicted_physics_labels(text: str) -> set:
-    labels = set()
-    for line in text.lower().splitlines():
-        if line.startswith("-"):
-            labels.add(line.split(":", 1)[-1].strip())
-    return labels
 
 
 def taxonomy_f1(pred: set, gt: set) -> float:
@@ -657,20 +633,8 @@ def taxonomy_f1(pred: set, gt: set) -> float:
 def compute_metrics(results: list) -> dict:
     """Compute metrics from a list of result dicts (each with prediction, target, metadata)."""
     if not results:
-        return {"answer_accuracy": 0.0, "physics_signal_accuracy": 0.0, "taxonomy_f1": 0.0, "per_question_type": {}}
+        return {"answer_accuracy": 0.0, "per_question_type": {}}
     ans_scores = [answer_accuracy(r["prediction"], r["target"]) for r in results]
-    phys_scores = []
-    tax_scores = []
-    for r in results:
-        p = physics_signal_accuracy(r["prediction"], r["target"])
-        if p is not None:
-            phys_scores.append(p)
-        if "taxonomy_labels" in r:
-            gt_tax = set(r["taxonomy_labels"])
-        else:
-            gt_tax = flatten_taxonomy(r.get("metadata", {}))
-        pred_tax = extract_predicted_physics_labels(r["prediction"])
-        tax_scores.append(taxonomy_f1(pred_tax, gt_tax))
     by_type: dict[str, dict] = {}
     for r in results:
         qt = r.get("question_type", "unknown")
@@ -688,8 +652,6 @@ def compute_metrics(results: list) -> dict:
     }
     return {
         "answer_accuracy": sum(ans_scores) / len(ans_scores),
-        "physics_signal_accuracy": sum(phys_scores) / len(phys_scores) if phys_scores else 0.0,
-        "taxonomy_f1": sum(tax_scores) / len(tax_scores),
         "per_question_type": per_question_type,
     }
 
@@ -697,8 +659,6 @@ def compute_metrics(results: list) -> dict:
 def print_metrics(metrics: dict, title: str) -> None:
     print(title)
     print(f"  answer_accuracy: {metrics['answer_accuracy']:.4f}")
-    print(f"  physics_signal_accuracy: {metrics['physics_signal_accuracy']:.4f}")
-    print(f"  taxonomy_f1: {metrics['taxonomy_f1']:.4f}")
     per = metrics.get("per_question_type", {})
     if per:
         print("  per_question_type:")

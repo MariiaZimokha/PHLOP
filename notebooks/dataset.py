@@ -51,7 +51,7 @@ class PHLOPDataset:
         extract_root: Optional[Union[str, Path]] = None,
         repo_type: str = "dataset",
         token: Optional[Union[str, bool]] = None,
-        keep_n_shards: int = 1,
+        keep_n_shards: int = 5,
     ):
         """
         Args:
