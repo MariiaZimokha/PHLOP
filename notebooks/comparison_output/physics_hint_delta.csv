@@ -1,0 +1,16 @@
+model,condition,no_physics,with_physics,delta_pp
+SmolVLM,Zero-shot,0.2459,0.2463,0.04
+SmolVLM,Easy,0.6143,0.667,5.27
+SmolVLM,Easy+Med,0.6935,0.7751,8.16
+SmolVLM,Hard,0.5561,0.5401,-1.59
+SmolVLM,Full,0.8243,0.8688,4.46
+Qwen2-VL,Zero-shot,0.1307,0.0761,-5.46
+Qwen2-VL,Easy,0.1009,0.38,27.92
+Qwen2-VL,Easy+Med,0.3933,0.6423,24.9
+Qwen2-VL,Hard,0.2954,0.4456,15.02
+Qwen2-VL,Full,0.4565,0.5959,13.94
+InternVL3,Zero-shot,0.146,0.1311,-1.49
+InternVL3,Easy,0.613,0.6436,3.06
+InternVL3,Easy+Med,0.8427,0.9104,6.78
+InternVL3,Hard,0.8245,0.8706,4.6
+InternVL3,Full,0.8228,0.9006,7.79

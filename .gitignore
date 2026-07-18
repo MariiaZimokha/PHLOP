@@ -174,3 +174,10 @@ cython_debug/
 generated/
 phlop_generation_buffer/
 .ruff_cache/
+
+# Large experiment outputs / model checkpoints (kept out of git)
+notebooks/results/
+notebooks/models/
+notebooks/.mplcache/
+notebooks/comparison_output.zip
+ablation_experiments/

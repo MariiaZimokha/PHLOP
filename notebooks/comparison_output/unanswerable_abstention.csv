@@ -1,0 +1,5 @@
+model,physics,n_unanswerable,n_abstained,abstention_rate
+Qwen2-VL,No physics hint,2801,0,0.0
+Qwen2-VL,With physics hint,2801,0,0.0
+InternVL3,No physics hint,2801,0,0.0
+InternVL3,With physics hint,2801,0,0.0

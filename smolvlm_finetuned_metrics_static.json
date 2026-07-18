@@ -1,0 +1,1378 @@
+{
+  "static": {
+    "no_physics": {
+      "base": {
+        "test": {
+          "answer_accuracy": 0.3289432300676207,
+          "per_question_type": {
+            "stationary_duration": {
+              "accuracy": 0.004548900682335102,
+              "f1": 0.00019565164225097213,
+              "count": 1319
+            },
+            "stopped_objects_count": {
+              "accuracy": 0.14487632508833923,
+              "f1": 0.0,
+              "count": 1981
+            },
+            "stationary_start_time": {
+              "accuracy": 0.21342383107088989,
+              "f1": 0.012747530774096238,
+              "count": 1326
+            },
+            "collision_presence": {
+              "accuracy": 1.0,
+              "f1": 0.017219320961458926,
+              "count": 1978
+            },
+            "object_count": {
+              "accuracy": 0.17851739788199697,
+              "f1": 0.0002689527651706169,
+              "count": 1983
+            },
+            "friction_comparison": {
+              "accuracy": 0.05495634309193631,
+              "f1": 0.008100176564480623,
+              "count": 1947
+            },
+            "rolling_detection": {
+              "accuracy": 0.325922182920667,
+              "f1": 0.0,
+              "count": 1979
+            },
+            "shape_distribution": {
+              "accuracy": 0.0007380073800738007,
+              "f1": 0.0001595691632592002,
+              "count": 1355
+            },
+            "newtons_second_law": {
+              "accuracy": 1.0,
+              "f1": 0.12087712173259663,
+              "count": 1367
+            },
+            "velocity_scaling": {
+              "accuracy": 0.0,
+              "f1": 0.012966361689304455,
+              "count": 1102
+            },
+            "friction_scaling": {
+              "accuracy": 0.0,
+              "f1": 0.0,
+              "count": 1114
+            },
+            "unknown": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 2801
+            },
+            "fastest_object": {
+              "accuracy": 0.010033444816053512,
+              "f1": 0.004559725228470351,
+              "count": 1196
+            },
+            "apparent_contradiction": {
+              "accuracy": 0.0,
+              "f1": 0.034821535510690144,
+              "count": 1076
+            },
+            "friction_coefficient_comparison": {
+              "accuracy": 0.016129032258064516,
+              "f1": 0.007215723344755603,
+              "count": 682
+            },
+            "momentum_conservation": {
+              "accuracy": 0.23687423687423687,
+              "f1": 0.09372009372009373,
+              "count": 819
+            },
+            "energy_analysis_taxonomy": {
+              "accuracy": 0.12316715542521994,
+              "f1": 0.032970425160577965,
+              "count": 341
+            },
+            "indirect_causation": {
+              "accuracy": 0.0,
+              "f1": 0.0,
+              "count": 67
+            },
+            "four_hop_causation": {
+              "accuracy": 0.0,
+              "f1": 0.0399444217699522,
+              "count": 56
+            },
+            "relative_velocity_magnitude": {
+              "accuracy": 0.0,
+              "f1": 0.0,
+              "count": 150
+            },
+            "event_sequence": {
+              "accuracy": 0.0,
+              "f1": 0.038784608344512916,
+              "count": 52
+            },
+            "temporal_consistency": {
+              "accuracy": 0.0,
+              "f1": 0.0530924809659422,
+              "count": 188
+            },
+            "direction_reversal": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 238
+            },
+            "property_competition": {
+              "accuracy": 0.8888888888888888,
+              "f1": 0.43102527071804275,
+              "count": 36
+            },
+            "mass_ratio": {
+              "accuracy": 0.0,
+              "f1": 0.0,
+              "count": 212
+            },
+            "relative_velocity_decision": {
+              "accuracy": 0.1267605633802817,
+              "f1": 0.13552525666684856,
+              "count": 71
+            }
+          }
+        }
+      },
+      "smolvlm_easy_no_physics": {
+        "test": {
+          "answer_accuracy": 0.6567856581223462,
+          "per_question_type": {
+            "stationary_duration": {
+              "accuracy": 0.2494313874147081,
+              "f1": 0.004479189118041239,
+              "count": 1319
+            },
+            "stopped_objects_count": {
+              "accuracy": 0.6809692074709742,
+              "f1": 0.01763328233422315,
+              "count": 1981
+            },
+            "stationary_start_time": {
+              "accuracy": 0.3393665158371041,
+              "f1": 0.011614026135858282,
+              "count": 1326
+            },
+            "collision_presence": {
+              "accuracy": 1.0,
+              "f1": 0.02548220870854036,
+              "count": 1978
+            },
+            "object_count": {
+              "accuracy": 0.7614725163893091,
+              "f1": 0.02105388878347195,
+              "count": 1983
+            },
+            "friction_comparison": {
+              "accuracy": 0.39599383667180277,
+              "f1": 0.03696167554635204,
+              "count": 1947
+            },
+            "rolling_detection": {
+              "accuracy": 0.7609903991915109,
+              "f1": 0.019593562804006585,
+              "count": 1979
+            },
+            "shape_distribution": {
+              "accuracy": 0.9992619926199262,
+              "f1": 0.13494846927646484,
+              "count": 1355
+            },
+            "newtons_second_law": {
+              "accuracy": 1.0,
+              "f1": 0.06007051013613136,
+              "count": 1367
+            },
+            "velocity_scaling": {
+              "accuracy": 0.10344827586206896,
+              "f1": 0.0938480753109537,
+              "count": 1102
+            },
+            "friction_scaling": {
+              "accuracy": 0.7055655296229802,
+              "f1": 0.11049952547069104,
+              "count": 1114
+            },
+            "unknown": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 2801
+            },
+            "fastest_object": {
+              "accuracy": 0.5459866220735786,
+              "f1": 0.1342075822099055,
+              "count": 1196
+            },
+            "apparent_contradiction": {
+              "accuracy": 0.0845724907063197,
+              "f1": 0.11739815720751191,
+              "count": 1076
+            },
+            "friction_coefficient_comparison": {
+              "accuracy": 0.5439882697947214,
+              "f1": 0.14771918440443282,
+              "count": 682
+            },
+            "momentum_conservation": {
+              "accuracy": 0.4249084249084249,
+              "f1": 0.07164547227649333,
+              "count": 819
+            },
+            "energy_analysis_taxonomy": {
+              "accuracy": 0.9941348973607038,
+              "f1": 0.15513681972441068,
+              "count": 341
+            },
+            "indirect_causation": {
+              "accuracy": 0.8955223880597015,
+              "f1": 0.1196607844437895,
+              "count": 67
+            },
+            "four_hop_causation": {
+              "accuracy": 0.26785714285714285,
+              "f1": 0.09572290332257193,
+              "count": 56
+            },
+            "relative_velocity_magnitude": {
+              "accuracy": 0.22666666666666666,
+              "f1": 0.03981036315021808,
+              "count": 150
+            },
+            "event_sequence": {
+              "accuracy": 0.4423076923076923,
+              "f1": 0.43154628298387193,
+              "count": 52
+            },
+            "temporal_consistency": {
+              "accuracy": 0.5159574468085106,
+              "f1": 0.2281122286790463,
+              "count": 188
+            },
+            "direction_reversal": {
+              "accuracy": 1.0,
+              "f1": 0.021392859322494958,
+              "count": 238
+            },
+            "property_competition": {
+              "accuracy": 1.0,
+              "f1": 0.3584895335029668,
+              "count": 36
+            },
+            "mass_ratio": {
+              "accuracy": 0.2641509433962264,
+              "f1": 0.002614553315285272,
+              "count": 212
+            },
+            "relative_velocity_decision": {
+              "accuracy": 0.4225352112676056,
+              "f1": 0.24382743055926281,
+              "count": 71
+            }
+          }
+        }
+      },
+      "smolvlm_easy_medium_no_physics": {
+        "test": {
+          "answer_accuracy": 0.7272369869476333,
+          "per_question_type": {
+            "stationary_duration": {
+              "accuracy": 0.88855193328279,
+              "f1": 0.02653997483735176,
+              "count": 1319
+            },
+            "stopped_objects_count": {
+              "accuracy": 0.5714285714285714,
+              "f1": 0.00958342331999753,
+              "count": 1981
+            },
+            "stationary_start_time": {
+              "accuracy": 0.33861236802413275,
+              "f1": 0.01102941960154115,
+              "count": 1326
+            },
+            "collision_presence": {
+              "accuracy": 1.0,
+              "f1": 0.02262048366327138,
+              "count": 1978
+            },
+            "object_count": {
+              "accuracy": 0.6338880484114977,
+              "f1": 0.014942420325906914,
+              "count": 1983
+            },
+            "friction_comparison": {
+              "accuracy": 0.7087827426810478,
+              "f1": 0.045871103309717595,
+              "count": 1947
+            },
+            "rolling_detection": {
+              "accuracy": 0.538655886811521,
+              "f1": 0.00960791675824411,
+              "count": 1979
+            },
+            "shape_distribution": {
+              "accuracy": 0.9874538745387453,
+              "f1": 0.11503356782478576,
+              "count": 1355
+            },
+            "newtons_second_law": {
+              "accuracy": 1.0,
+              "f1": 0.06326158685068185,
+              "count": 1367
+            },
+            "velocity_scaling": {
+              "accuracy": 0.3666061705989111,
+              "f1": 0.10750154348095038,
+              "count": 1102
+            },
+            "friction_scaling": {
+              "accuracy": 0.466786355475763,
+              "f1": 0.08446877704728074,
+              "count": 1114
+            },
+            "unknown": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 2801
+            },
+            "fastest_object": {
+              "accuracy": 0.5618729096989966,
+              "f1": 0.1205073720461129,
+              "count": 1196
+            },
+            "apparent_contradiction": {
+              "accuracy": 1.0,
+              "f1": 0.19728063521264091,
+              "count": 1076
+            },
+            "friction_coefficient_comparison": {
+              "accuracy": 0.6847507331378299,
+              "f1": 0.14075354648661698,
+              "count": 682
+            },
+            "momentum_conservation": {
+              "accuracy": 0.4481074481074481,
+              "f1": 0.09493969883744809,
+              "count": 819
+            },
+            "energy_analysis_taxonomy": {
+              "accuracy": 0.8709677419354839,
+              "f1": 0.12472202429600597,
+              "count": 341
+            },
+            "indirect_causation": {
+              "accuracy": 1.0,
+              "f1": 0.11688057882814701,
+              "count": 67
+            },
+            "four_hop_causation": {
+              "accuracy": 0.03571428571428571,
+              "f1": 0.06109137322180212,
+              "count": 56
+            },
+            "relative_velocity_magnitude": {
+              "accuracy": 0.46,
+              "f1": 0.04180787570760987,
+              "count": 150
+            },
+            "event_sequence": {
+              "accuracy": 0.4423076923076923,
+              "f1": 0.4247668030886823,
+              "count": 52
+            },
+            "temporal_consistency": {
+              "accuracy": 0.8563829787234043,
+              "f1": 0.2897107385396671,
+              "count": 188
+            },
+            "direction_reversal": {
+              "accuracy": 1.0,
+              "f1": 0.028810175789953416,
+              "count": 238
+            },
+            "property_competition": {
+              "accuracy": 0.9722222222222222,
+              "f1": 0.3063511821295045,
+              "count": 36
+            },
+            "mass_ratio": {
+              "accuracy": 0.5801886792452831,
+              "f1": 0.018649284874217343,
+              "count": 212
+            },
+            "relative_velocity_decision": {
+              "accuracy": 0.5211267605633803,
+              "f1": 0.25167235700645013,
+              "count": 71
+            }
+          }
+        }
+      },
+      "smolvlm_hard_no_physics": {
+        "test": {
+          "answer_accuracy": 0.6049693348010694,
+          "per_question_type": {
+            "stationary_duration": {
+              "accuracy": 0.13570887035633056,
+              "f1": 0.0036206259165831914,
+              "count": 1319
+            },
+            "stopped_objects_count": {
+              "accuracy": 0.6951034830893488,
+              "f1": 0.018850180274918443,
+              "count": 1981
+            },
+            "stationary_start_time": {
+              "accuracy": 0.3295625942684766,
+              "f1": 0.009248617875009251,
+              "count": 1326
+            },
+            "collision_presence": {
+              "accuracy": 1.0,
+              "f1": 0.004422761468386082,
+              "count": 1978
+            },
+            "object_count": {
+              "accuracy": 0.6742309631870903,
+              "f1": 0.011377479870788538,
+              "count": 1983
+            },
+            "friction_comparison": {
+              "accuracy": 0.5921931176168465,
+              "f1": 0.04183283218140984,
+              "count": 1947
+            },
+            "rolling_detection": {
+              "accuracy": 0.42546740778170794,
+              "f1": 0.0028961827473983712,
+              "count": 1979
+            },
+            "shape_distribution": {
+              "accuracy": 0.4361623616236162,
+              "f1": 0.04968237651012209,
+              "count": 1355
+            },
+            "newtons_second_law": {
+              "accuracy": 0.3306510607168983,
+              "f1": 0.035209434186828675,
+              "count": 1367
+            },
+            "velocity_scaling": {
+              "accuracy": 1.0,
+              "f1": 0.13966124140232727,
+              "count": 1102
+            },
+            "friction_scaling": {
+              "accuracy": 1.0,
+              "f1": 0.10796306992425231,
+              "count": 1114
+            },
+            "unknown": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 2801
+            },
+            "fastest_object": {
+              "accuracy": 0.0802675585284281,
+              "f1": 0.08415539857656404,
+              "count": 1196
+            },
+            "apparent_contradiction": {
+              "accuracy": 0.19052044609665428,
+              "f1": 0.11607239677293414,
+              "count": 1076
+            },
+            "friction_coefficient_comparison": {
+              "accuracy": 0.005865102639296188,
+              "f1": 0.08709843006830416,
+              "count": 682
+            },
+            "momentum_conservation": {
+              "accuracy": 0.9267399267399268,
+              "f1": 0.1164460254550655,
+              "count": 819
+            },
+            "energy_analysis_taxonomy": {
+              "accuracy": 1.0,
+              "f1": 0.13594836109848552,
+              "count": 341
+            },
+            "indirect_causation": {
+              "accuracy": 0.373134328358209,
+              "f1": 0.07701378081638376,
+              "count": 67
+            },
+            "four_hop_causation": {
+              "accuracy": 0.5892857142857143,
+              "f1": 0.1885510962994983,
+              "count": 56
+            },
+            "relative_velocity_magnitude": {
+              "accuracy": 0.30666666666666664,
+              "f1": 0.042559386396704924,
+              "count": 150
+            },
+            "event_sequence": {
+              "accuracy": 0.0,
+              "f1": 0.3882777994246148,
+              "count": 52
+            },
+            "temporal_consistency": {
+              "accuracy": 0.9202127659574468,
+              "f1": 0.29651913964645354,
+              "count": 188
+            },
+            "direction_reversal": {
+              "accuracy": 1.0,
+              "f1": 0.012950568863945834,
+              "count": 238
+            },
+            "property_competition": {
+              "accuracy": 0.3611111111111111,
+              "f1": 0.20013969615852456,
+              "count": 36
+            },
+            "mass_ratio": {
+              "accuracy": 0.30660377358490565,
+              "f1": 0.00986466829751525,
+              "count": 212
+            },
+            "relative_velocity_decision": {
+              "accuracy": 0.38028169014084506,
+              "f1": 0.2911062565812664,
+              "count": 71
+            }
+          }
+        }
+      },
+      "smolvlm_full_no_physics": {
+        "test": {
+          "answer_accuracy": 0.8436074854536877,
+          "per_question_type": {
+            "stationary_duration": {
+              "accuracy": 0.9886277482941622,
+              "f1": 0.03642664282130831,
+              "count": 1319
+            },
+            "stopped_objects_count": {
+              "accuracy": 0.6203937405350833,
+              "f1": 0.015833691041311836,
+              "count": 1981
+            },
+            "stationary_start_time": {
+              "accuracy": 0.5037707390648567,
+              "f1": 0.017788660555940607,
+              "count": 1326
+            },
+            "collision_presence": {
+              "accuracy": 1.0,
+              "f1": 0.02795690092395821,
+              "count": 1978
+            },
+            "object_count": {
+              "accuracy": 0.7478567826525466,
+              "f1": 0.02114169992914194,
+              "count": 1983
+            },
+            "friction_comparison": {
+              "accuracy": 0.650231124807396,
+              "f1": 0.04933435247211427,
+              "count": 1947
+            },
+            "rolling_detection": {
+              "accuracy": 0.7382516422435573,
+              "f1": 0.01944195371491596,
+              "count": 1979
+            },
+            "shape_distribution": {
+              "accuracy": 0.9904059040590406,
+              "f1": 0.13749171863741513,
+              "count": 1355
+            },
+            "newtons_second_law": {
+              "accuracy": 1.0,
+              "f1": 0.060851174862448856,
+              "count": 1367
+            },
+            "velocity_scaling": {
+              "accuracy": 1.0,
+              "f1": 0.1414730381405311,
+              "count": 1102
+            },
+            "friction_scaling": {
+              "accuracy": 1.0,
+              "f1": 0.11189201638580462,
+              "count": 1114
+            },
+            "unknown": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 2801
+            },
+            "fastest_object": {
+              "accuracy": 0.5760869565217391,
+              "f1": 0.14549273908713514,
+              "count": 1196
+            },
+            "apparent_contradiction": {
+              "accuracy": 1.0,
+              "f1": 0.2066351781217562,
+              "count": 1076
+            },
+            "friction_coefficient_comparison": {
+              "accuracy": 0.9398826979472141,
+              "f1": 0.16736116819067207,
+              "count": 682
+            },
+            "momentum_conservation": {
+              "accuracy": 0.8449328449328449,
+              "f1": 0.11278012670518439,
+              "count": 819
+            },
+            "energy_analysis_taxonomy": {
+              "accuracy": 0.9970674486803519,
+              "f1": 0.14809230598859308,
+              "count": 341
+            },
+            "indirect_causation": {
+              "accuracy": 1.0,
+              "f1": 0.11835622007149552,
+              "count": 67
+            },
+            "four_hop_causation": {
+              "accuracy": 0.8214285714285714,
+              "f1": 0.18926398419973176,
+              "count": 56
+            },
+            "relative_velocity_magnitude": {
+              "accuracy": 0.7866666666666666,
+              "f1": 0.06438163498854473,
+              "count": 150
+            },
+            "event_sequence": {
+              "accuracy": 0.4807692307692308,
+              "f1": 0.4461247341910587,
+              "count": 52
+            },
+            "temporal_consistency": {
+              "accuracy": 0.9361702127659575,
+              "f1": 0.296873798525347,
+              "count": 188
+            },
+            "direction_reversal": {
+              "accuracy": 1.0,
+              "f1": 0.030728057570007624,
+              "count": 238
+            },
+            "property_competition": {
+              "accuracy": 0.9722222222222222,
+              "f1": 0.31319422836423244,
+              "count": 36
+            },
+            "mass_ratio": {
+              "accuracy": 0.7688679245283019,
+              "f1": 0.027642953785392547,
+              "count": 212
+            },
+            "relative_velocity_decision": {
+              "accuracy": 0.5211267605633803,
+              "f1": 0.25618089430777935,
+              "count": 71
+            }
+          }
+        }
+      }
+    },
+    "with_physics": {
+      "base": {
+        "test": {
+          "answer_accuracy": 0.3292577449284479,
+          "per_question_type": {
+            "stationary_duration": {
+              "accuracy": 0.014404852160727824,
+              "f1": 0.0007336936584411456,
+              "count": 1319
+            },
+            "stopped_objects_count": {
+              "accuracy": 0.14487632508833923,
+              "f1": 0.0,
+              "count": 1981
+            },
+            "stationary_start_time": {
+              "accuracy": 0.2171945701357466,
+              "f1": 0.012747530774096238,
+              "count": 1326
+            },
+            "collision_presence": {
+              "accuracy": 1.0,
+              "f1": 0.020961271931690027,
+              "count": 1978
+            },
+            "object_count": {
+              "accuracy": 0.17750882501260717,
+              "f1": 0.0002017145738779627,
+              "count": 1983
+            },
+            "friction_comparison": {
+              "accuracy": 0.07601438109912687,
+              "f1": 0.010980379131974855,
+              "count": 1947
+            },
+            "rolling_detection": {
+              "accuracy": 0.325922182920667,
+              "f1": 0.0,
+              "count": 1979
+            },
+            "shape_distribution": {
+              "accuracy": 0.0,
+              "f1": 0.0,
+              "count": 1355
+            },
+            "newtons_second_law": {
+              "accuracy": 1.0,
+              "f1": 0.10662346311905792,
+              "count": 1367
+            },
+            "velocity_scaling": {
+              "accuracy": 0.0,
+              "f1": 0.043628674455109755,
+              "count": 1102
+            },
+            "friction_scaling": {
+              "accuracy": 0.0,
+              "f1": 0.0,
+              "count": 1114
+            },
+            "unknown": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 2801
+            },
+            "fastest_object": {
+              "accuracy": 0.007525083612040134,
+              "f1": 0.004454270895292205,
+              "count": 1196
+            },
+            "apparent_contradiction": {
+              "accuracy": 0.0,
+              "f1": 0.035889280198354676,
+              "count": 1076
+            },
+            "friction_coefficient_comparison": {
+              "accuracy": 0.020527859237536656,
+              "f1": 0.009712151647635519,
+              "count": 682
+            },
+            "momentum_conservation": {
+              "accuracy": 0.15995115995115994,
+              "f1": 0.06230406230406231,
+              "count": 819
+            },
+            "energy_analysis_taxonomy": {
+              "accuracy": 0.16422287390029325,
+              "f1": 0.04456911062509831,
+              "count": 341
+            },
+            "indirect_causation": {
+              "accuracy": 0.0,
+              "f1": 0.0,
+              "count": 67
+            },
+            "four_hop_causation": {
+              "accuracy": 0.0,
+              "f1": 0.0403970221649489,
+              "count": 56
+            },
+            "relative_velocity_magnitude": {
+              "accuracy": 0.0,
+              "f1": 0.0,
+              "count": 150
+            },
+            "event_sequence": {
+              "accuracy": 0.0,
+              "f1": 0.038323938800316155,
+              "count": 52
+            },
+            "temporal_consistency": {
+              "accuracy": 0.0,
+              "f1": 0.05985532577984742,
+              "count": 188
+            },
+            "direction_reversal": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 238
+            },
+            "property_competition": {
+              "accuracy": 0.8888888888888888,
+              "f1": 0.42861270541239566,
+              "count": 36
+            },
+            "mass_ratio": {
+              "accuracy": 0.0,
+              "f1": 0.0,
+              "count": 212
+            },
+            "relative_velocity_decision": {
+              "accuracy": 0.14084507042253522,
+              "f1": 0.16069528086656185,
+              "count": 71
+            }
+          }
+        }
+      },
+      "smolvlm_easy_with_physics": {
+        "test": {
+          "answer_accuracy": 0.7036483723855952,
+          "per_question_type": {
+            "stationary_duration": {
+              "accuracy": 0.15921152388172857,
+              "f1": 0.006128883826242843,
+              "count": 1319
+            },
+            "stopped_objects_count": {
+              "accuracy": 0.6622917718324078,
+              "f1": 0.01769924212756255,
+              "count": 1981
+            },
+            "stationary_start_time": {
+              "accuracy": 0.36199095022624433,
+              "f1": 0.01293919725703134,
+              "count": 1326
+            },
+            "collision_presence": {
+              "accuracy": 1.0,
+              "f1": 0.028358164236913168,
+              "count": 1978
+            },
+            "object_count": {
+              "accuracy": 0.9369641956631367,
+              "f1": 0.030472354440229343,
+              "count": 1983
+            },
+            "friction_comparison": {
+              "accuracy": 0.6764252696456087,
+              "f1": 0.05341360730141566,
+              "count": 1947
+            },
+            "rolling_detection": {
+              "accuracy": 0.7650328448711471,
+              "f1": 0.018895203182449586,
+              "count": 1979
+            },
+            "shape_distribution": {
+              "accuracy": 0.9911439114391144,
+              "f1": 0.14242749928556622,
+              "count": 1355
+            },
+            "newtons_second_law": {
+              "accuracy": 1.0,
+              "f1": 0.07506072921089911,
+              "count": 1367
+            },
+            "velocity_scaling": {
+              "accuracy": 0.25499092558983666,
+              "f1": 0.11185930097589215,
+              "count": 1102
+            },
+            "friction_scaling": {
+              "accuracy": 0.9631956912028725,
+              "f1": 0.1332984132612034,
+              "count": 1114
+            },
+            "unknown": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 2801
+            },
+            "fastest_object": {
+              "accuracy": 0.06939799331103678,
+              "f1": 0.09258808795657349,
+              "count": 1196
+            },
+            "apparent_contradiction": {
+              "accuracy": 0.6003717472118959,
+              "f1": 0.15988974167777367,
+              "count": 1076
+            },
+            "friction_coefficient_comparison": {
+              "accuracy": 0.312316715542522,
+              "f1": 0.13902252550679556,
+              "count": 682
+            },
+            "momentum_conservation": {
+              "accuracy": 0.6654456654456654,
+              "f1": 0.11844660210493824,
+              "count": 819
+            },
+            "energy_analysis_taxonomy": {
+              "accuracy": 0.9589442815249267,
+              "f1": 0.15956750422170873,
+              "count": 341
+            },
+            "indirect_causation": {
+              "accuracy": 0.8805970149253731,
+              "f1": 0.11166209042977263,
+              "count": 67
+            },
+            "four_hop_causation": {
+              "accuracy": 0.19642857142857142,
+              "f1": 0.09406458103078318,
+              "count": 56
+            },
+            "relative_velocity_magnitude": {
+              "accuracy": 0.14666666666666667,
+              "f1": 0.03867385463731155,
+              "count": 150
+            },
+            "event_sequence": {
+              "accuracy": 0.5192307692307693,
+              "f1": 0.4490260280807652,
+              "count": 52
+            },
+            "temporal_consistency": {
+              "accuracy": 0.4308510638297872,
+              "f1": 0.21916580519186213,
+              "count": 188
+            },
+            "direction_reversal": {
+              "accuracy": 1.0,
+              "f1": 0.029911380827877542,
+              "count": 238
+            },
+            "property_competition": {
+              "accuracy": 1.0,
+              "f1": 0.36130007115421375,
+              "count": 36
+            },
+            "mass_ratio": {
+              "accuracy": 0.25471698113207547,
+              "f1": 0.009956044915592765,
+              "count": 212
+            },
+            "relative_velocity_decision": {
+              "accuracy": 0.30985915492957744,
+              "f1": 0.24400853200621997,
+              "count": 71
+            }
+          }
+        }
+      },
+      "smolvlm_easy_medium_with_physics": {
+        "test": {
+          "answer_accuracy": 0.7998506054411071,
+          "per_question_type": {
+            "stationary_duration": {
+              "accuracy": 0.9044730856709629,
+              "f1": 0.028860782316071535,
+              "count": 1319
+            },
+            "stopped_objects_count": {
+              "accuracy": 0.602221100454316,
+              "f1": 0.012459010095465729,
+              "count": 1981
+            },
+            "stationary_start_time": {
+              "accuracy": 0.3838612368024133,
+              "f1": 0.012337101465381662,
+              "count": 1326
+            },
+            "collision_presence": {
+              "accuracy": 1.0,
+              "f1": 0.023165938381277035,
+              "count": 1978
+            },
+            "object_count": {
+              "accuracy": 0.9631870902672718,
+              "f1": 0.0296796081304103,
+              "count": 1983
+            },
+            "friction_comparison": {
+              "accuracy": 0.6908063687724705,
+              "f1": 0.04694546267341157,
+              "count": 1947
+            },
+            "rolling_detection": {
+              "accuracy": 0.6826680141485599,
+              "f1": 0.013050363974953842,
+              "count": 1979
+            },
+            "shape_distribution": {
+              "accuracy": 0.9712177121771217,
+              "f1": 0.12677631843788503,
+              "count": 1355
+            },
+            "newtons_second_law": {
+              "accuracy": 1.0,
+              "f1": 0.05717964197737031,
+              "count": 1367
+            },
+            "velocity_scaling": {
+              "accuracy": 0.9754990925589837,
+              "f1": 0.16922769821723646,
+              "count": 1102
+            },
+            "friction_scaling": {
+              "accuracy": 0.5574506283662477,
+              "f1": 0.0957083867147147,
+              "count": 1114
+            },
+            "unknown": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 2801
+            },
+            "fastest_object": {
+              "accuracy": 0.5693979933110368,
+              "f1": 0.12358980185909245,
+              "count": 1196
+            },
+            "apparent_contradiction": {
+              "accuracy": 0.9962825278810409,
+              "f1": 0.2268016585927195,
+              "count": 1076
+            },
+            "friction_coefficient_comparison": {
+              "accuracy": 0.7287390029325513,
+              "f1": 0.1461953974320469,
+              "count": 682
+            },
+            "momentum_conservation": {
+              "accuracy": 0.4249084249084249,
+              "f1": 0.11021186896200855,
+              "count": 819
+            },
+            "energy_analysis_taxonomy": {
+              "accuracy": 0.9618768328445748,
+              "f1": 0.14828933711727757,
+              "count": 341
+            },
+            "indirect_causation": {
+              "accuracy": 0.9253731343283582,
+              "f1": 0.1095680489417158,
+              "count": 67
+            },
+            "four_hop_causation": {
+              "accuracy": 0.125,
+              "f1": 0.07026051009235344,
+              "count": 56
+            },
+            "relative_velocity_magnitude": {
+              "accuracy": 0.5,
+              "f1": 0.045968106657175586,
+              "count": 150
+            },
+            "event_sequence": {
+              "accuracy": 0.46153846153846156,
+              "f1": 0.4492694047136431,
+              "count": 52
+            },
+            "temporal_consistency": {
+              "accuracy": 0.9148936170212766,
+              "f1": 0.3224057659769055,
+              "count": 188
+            },
+            "direction_reversal": {
+              "accuracy": 1.0,
+              "f1": 0.0325774352049101,
+              "count": 238
+            },
+            "property_competition": {
+              "accuracy": 1.0,
+              "f1": 0.3290891159444519,
+              "count": 36
+            },
+            "mass_ratio": {
+              "accuracy": 0.5235849056603774,
+              "f1": 0.016118204163744945,
+              "count": 212
+            },
+            "relative_velocity_decision": {
+              "accuracy": 0.49295774647887325,
+              "f1": 0.26774898792762936,
+              "count": 71
+            }
+          }
+        }
+      },
+      "smolvlm_hard_with_physics": {
+        "test": {
+          "answer_accuracy": 0.5907768517062432,
+          "per_question_type": {
+            "stationary_duration": {
+              "accuracy": 0.08946171341925702,
+              "f1": 0.003080594933681304,
+              "count": 1319
+            },
+            "stopped_objects_count": {
+              "accuracy": 0.49823321554770317,
+              "f1": 0.009274655924478408,
+              "count": 1981
+            },
+            "stationary_start_time": {
+              "accuracy": 0.27450980392156865,
+              "f1": 0.010138277975160486,
+              "count": 1326
+            },
+            "collision_presence": {
+              "accuracy": 1.0,
+              "f1": 0.015603257318093727,
+              "count": 1978
+            },
+            "object_count": {
+              "accuracy": 0.5607665153807363,
+              "f1": 0.009897313790226596,
+              "count": 1983
+            },
+            "friction_comparison": {
+              "accuracy": 0.6831022085259374,
+              "f1": 0.04815054595048628,
+              "count": 1947
+            },
+            "rolling_detection": {
+              "accuracy": 0.5416877210712481,
+              "f1": 0.0024848245263923954,
+              "count": 1979
+            },
+            "shape_distribution": {
+              "accuracy": 0.32693726937269374,
+              "f1": 0.04134925077122295,
+              "count": 1355
+            },
+            "newtons_second_law": {
+              "accuracy": 0.5062179956108266,
+              "f1": 0.05023937638388655,
+              "count": 1367
+            },
+            "velocity_scaling": {
+              "accuracy": 1.0,
+              "f1": 0.13695289479723488,
+              "count": 1102
+            },
+            "friction_scaling": {
+              "accuracy": 1.0,
+              "f1": 0.11481146860329826,
+              "count": 1114
+            },
+            "unknown": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 2801
+            },
+            "fastest_object": {
+              "accuracy": 0.010033444816053512,
+              "f1": 0.07990577493875783,
+              "count": 1196
+            },
+            "apparent_contradiction": {
+              "accuracy": 0.18680297397769516,
+              "f1": 0.14287312827310408,
+              "count": 1076
+            },
+            "friction_coefficient_comparison": {
+              "accuracy": 0.0,
+              "f1": 0.08725485364059189,
+              "count": 682
+            },
+            "momentum_conservation": {
+              "accuracy": 0.9413919413919414,
+              "f1": 0.12126405053640342,
+              "count": 819
+            },
+            "energy_analysis_taxonomy": {
+              "accuracy": 1.0,
+              "f1": 0.1523561006700227,
+              "count": 341
+            },
+            "indirect_causation": {
+              "accuracy": 0.029850746268656716,
+              "f1": 0.019155614168571963,
+              "count": 67
+            },
+            "four_hop_causation": {
+              "accuracy": 0.7678571428571429,
+              "f1": 0.19955781453050703,
+              "count": 56
+            },
+            "relative_velocity_magnitude": {
+              "accuracy": 0.22,
+              "f1": 0.035711816001382256,
+              "count": 150
+            },
+            "event_sequence": {
+              "accuracy": 0.038461538461538464,
+              "f1": 0.35006687142088505,
+              "count": 52
+            },
+            "temporal_consistency": {
+              "accuracy": 0.8351063829787234,
+              "f1": 0.300700927728446,
+              "count": 188
+            },
+            "direction_reversal": {
+              "accuracy": 1.0,
+              "f1": 0.012118569767444997,
+              "count": 238
+            },
+            "property_competition": {
+              "accuracy": 0.8055555555555556,
+              "f1": 0.2884782803166331,
+              "count": 36
+            },
+            "mass_ratio": {
+              "accuracy": 0.24056603773584906,
+              "f1": 0.009295802385611444,
+              "count": 212
+            },
+            "relative_velocity_decision": {
+              "accuracy": 0.4788732394366197,
+              "f1": 0.24820919575057773,
+              "count": 71
+            }
+          }
+        }
+      },
+      "smolvlm_full_with_physics": {
+        "test": {
+          "answer_accuracy": 0.8832756722755151,
+          "per_question_type": {
+            "stationary_duration": {
+              "accuracy": 0.9863532979529946,
+              "f1": 0.03646976440745177,
+              "count": 1319
+            },
+            "stopped_objects_count": {
+              "accuracy": 0.668854114083796,
+              "f1": 0.018522926115544503,
+              "count": 1981
+            },
+            "stationary_start_time": {
+              "accuracy": 0.7850678733031674,
+              "f1": 0.027552000460538933,
+              "count": 1326
+            },
+            "collision_presence": {
+              "accuracy": 1.0,
+              "f1": 0.025665025568709053,
+              "count": 1978
+            },
+            "object_count": {
+              "accuracy": 0.9672213817448311,
+              "f1": 0.03481959482891764,
+              "count": 1983
+            },
+            "friction_comparison": {
+              "accuracy": 0.6877247046738573,
+              "f1": 0.050571826234565194,
+              "count": 1947
+            },
+            "rolling_detection": {
+              "accuracy": 0.7670540677109652,
+              "f1": 0.016626782705349983,
+              "count": 1979
+            },
+            "shape_distribution": {
+              "accuracy": 0.9940959409594096,
+              "f1": 0.13519078771998158,
+              "count": 1355
+            },
+            "newtons_second_law": {
+              "accuracy": 1.0,
+              "f1": 0.0797867235802605,
+              "count": 1367
+            },
+            "velocity_scaling": {
+              "accuracy": 1.0,
+              "f1": 0.16460371001351104,
+              "count": 1102
+            },
+            "friction_scaling": {
+              "accuracy": 1.0,
+              "f1": 0.11913427068316987,
+              "count": 1114
+            },
+            "unknown": {
+              "accuracy": 1.0,
+              "f1": 0.0,
+              "count": 2801
+            },
+            "fastest_object": {
+              "accuracy": 0.6546822742474916,
+              "f1": 0.16124902710941819,
+              "count": 1196
+            },
+            "apparent_contradiction": {
+              "accuracy": 1.0,
+              "f1": 0.21003386278604524,
+              "count": 1076
+            },
+            "friction_coefficient_comparison": {
+              "accuracy": 0.9809384164222874,
+              "f1": 0.18189213855489117,
+              "count": 682
+            },
+            "momentum_conservation": {
+              "accuracy": 0.6678876678876678,
+              "f1": 0.12321632939689,
+              "count": 819
+            },
+            "energy_analysis_taxonomy": {
+              "accuracy": 1.0,
+              "f1": 0.15572258608993467,
+              "count": 341
+            },
+            "indirect_causation": {
+              "accuracy": 1.0,
+              "f1": 0.11803926879934713,
+              "count": 67
+            },
+            "four_hop_causation": {
+              "accuracy": 1.0,
+              "f1": 0.2257261056920224,
+              "count": 56
+            },
+            "relative_velocity_magnitude": {
+              "accuracy": 0.8533333333333334,
+              "f1": 0.06577519215016808,
+              "count": 150
+            },
+            "event_sequence": {
+              "accuracy": 0.5384615384615384,
+              "f1": 0.4395383275919481,
+              "count": 52
+            },
+            "temporal_consistency": {
+              "accuracy": 0.7287234042553191,
+              "f1": 0.29035593841413265,
+              "count": 188
+            },
+            "direction_reversal": {
+              "accuracy": 1.0,
+              "f1": 0.029776042445360827,
+              "count": 238
+            },
+            "property_competition": {
+              "accuracy": 0.9722222222222222,
+              "f1": 0.3207681089986634,
+              "count": 36
+            },
+            "mass_ratio": {
+              "accuracy": 0.8301886792452831,
+              "f1": 0.031112101229196554,
+              "count": 212
+            },
+            "relative_velocity_decision": {
+              "accuracy": 0.49295774647887325,
+              "f1": 0.25690178526484425,
+              "count": 71
+            }
+          }
+        }
+      }
+    }
+  }
+}
