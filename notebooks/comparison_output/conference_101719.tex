@@ -43,8 +43,8 @@
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
 
-\title{\textbf{PHLOP}: \textbf{P}hysics-Grounded \textbf{H}ierarchical \textbf{L}atent space for \textbf{O}bject
-state and \textbf{P}resentation*\\
+\title{\textbf{PHLOP}: \textbf{P}hysics-Grounded \textbf{H}ierarchical \textbf{L}abels for \textbf{O}bject
+\textbf{P}roperties*\\
 % {\footnotesize \textsuperscript{*}Note: Sub-titles are not captured in Xplore and
 % should not be used}
 % \thanks{Identify applicable funding agency here. If none, delete this.}
@@ -68,7 +68,7 @@ London, UK \\
 \maketitle
 
 \begin{abstract}
-Understanding how objects move, interact, and respond to physical forces remains a key challenge in AI. Existing benchmarks such as CLEVRER, COMPHY, and Physion++ either rely on symbolic labels or lack interpretable grounding for physical dynamics. We introduce \textbf{PHLOP} (\textit{Physics-grounded Hierarchical Latent space for Object state and Presentation}), a diagnostic benchmark that bridges low-level physics and high-level reasoning. PHLOP uses MuJoCo simulations to procedurally generate diverse scenes with realistic object parameters (e.g., mass, friction, elasticity), and augments them with a hierarchical annotations defined by a formal taxonomy, covering different levels of abstraction of physical events (e.g., rolling, sliding, collision). Each video is annotated per-object, per-frame resolution. A question-generation module produces difficulty-graded queries spanning temporal, causal, and material reasoning over domain-generalization (out-of-distribution) splits. Experiments with open video-language models reveal substantial gaps in zero-shot physical understanding; parameter-efficient (LoRA) fine-tuning across difficulty curricula closes much of this gap, while textual physics hints help unevenly across models. PHLOP enables interpretable, reproducible, and fine-grained evaluation of physical reasoning and supports future research at the intersection of simulation and language.
+Physical video--QA benchmarks often report high scores without separating visual dynamics from textual shortcuts. We introduce \textbf{PHLOP} (\textit{Physics-grounded Hierarchical Labels for Object Properties}), a controllable MuJoCo diagnostic that pairs rigid-body video with per-object, per-frame taxonomy labels and real-valued parameters (mass, friction, elasticity). Factor-disjoint train/val/test splits and difficulty-graded questions support curriculum-style probing of open video--language models. Zero-shot accuracy is near chance; LoRA fine-tuning raises scores substantially, and textual physics hints help unevenly across models. Critically, several templates remain solvable from the question text alone, so we frame PHLOP as a \emph{leak-auditable curriculum and cue-sensitivity diagnostic}: what a researcher learns is how models adapt under curricula and non-visual cues on a fully attributed physics substrate---not that high accuracy equals grounded Newtonian understanding. The open generator, labels, and question typology make shortcut solvability measurable rather than hidden.
 \end{abstract}
 
 
@@ -86,8 +86,12 @@ simulation, physics engine, taxonomy, object properties, annotation, video quest
 \setlength{\tabcolsep}{5pt}
 \renewcommand{\arraystretch}{1.2}
 \caption{
-\textbf{Comprehensive Comparison of Physical Reasoning Benchmarks.}
-PHLOP uniquely offers detailed Per-frame annotations defined by formal taxonomy, explicit friction and rotational dynamics modeling, and interpretable physical event detections. \textbf{Bold rows} highlight capabilities that are uniquely or fully supported by PHLOP. \cmark = fully supported, \warn = partially supported, \xmark = not supported.
+\textbf{Comparison of physical-reasoning benchmarks} (authors' coding of each system; judgments are contestable).
+Capabilities: \textit{Counterfactual Dynamics} $=$ engine re-simulation under interventions (not verbal what-ifs);
+\textit{Few-shot Material Reasoning} $=$ inferring material-linked properties without numeric parameters in the question stem;
+\textit{Per-frame Taxonomy} $=$ object-level event labels in a formal hierarchy at every frame.
+Bold marks denser support on that row, not overall superiority.
+\cmark = fully supported, \warn = partially supported, \xmark = not supported.
 }
 \begin{tabular}{p{5.1cm}cccccccc}
 \toprule
@@ -105,9 +109,9 @@ PHLOP uniquely offers detailed Per-frame annotations defined by formal taxonomy,
 Question Answering                   & \cmark & \cmark & \cmark & \cmark & \cmark & \cmark & \cmark & \xmark \\
 Diagnostic Annotation                & \cmark & \warn  & \warn  & \warn  & \warn  & \xmark & \warn  & \warn \\
 \textbf{Per-frame Annotations Defined by a Formal Taxonomy}   & \textbf{\cmark} & \xmark & \warn  & \xmark & \xmark & \xmark & \xmark & \xmark \\
-Counterfactual Dynamics              & \cmark & \warn  & \warn  & \cmark & \warn  & \xmark & \xmark & \xmark \\
+Counterfactual Dynamics              & \warn  & \warn  & \cmark & \cmark & \warn  & \xmark & \xmark & \xmark \\
 Explicit Physical Properties         & \cmark & \warn  & \warn  & \xmark & \warn  & \xmark & \xmark & \warn \\
-Few-shot Material Reasoning          & \cmark & \warn  & \warn  & \xmark & \xmark & \xmark & \xmark & \xmark \\
+Few-shot Material Reasoning          & \warn  & \warn  & \warn  & \xmark & \xmark & \xmark & \xmark & \xmark \\
 \midrule
 \multicolumn{9}{l}{\textit{Fine-Grained Physical Reasoning}} \\
 Real-valued Properties (mass, friction, etc.) & \cmark & \warn & \warn & \xmark & \warn & \xmark & \xmark & \xmark \\
@@ -115,55 +119,41 @@ Real-valued Properties (mass, friction, etc.) & \cmark & \warn & \warn & \xmark 
 \textbf{Friction-induced Events}     & \textbf{\cmark} & \xmark & \xmark & \xmark & \xmark & \xmark & \xmark & \xmark \\
 \textbf{Elastic vs. Inelastic Collision} & \textbf{\cmark} & \warn  & \warn  & \xmark & \xmark & \xmark & \xmark & \xmark \\
 \textbf{Moving Event Onset Detection}  & \textbf{\cmark} & \xmark & \xmark & \xmark & \xmark & \xmark & \xmark & \xmark \\
-\textbf{Distribution-based Material Sampling} & \textbf{\cmark} & \warn  & \warn  & \xmark & \xmark & \xmark & \xmark & \xmark \\
+Distribution-based Material Sampling & \cmark & \warn  & \warn  & \xmark & \xmark & \xmark & \xmark & \xmark \\
 \bottomrule
 \end{tabular}
 \label{tab:phlop_full_comparison}
 \end{table*}
 
 
-Physical reasoning, which involves understanding and predicting how objects interact, move, and respond to forces, is fundamental to both human cognition and machine intelligence \cite{yi2020clevrer,tung2023physion++,battaglia2013simulation,piloto2022intuitive}. From an early age, humans intuitively grasp complex physical interactions \cite{piloto2022intuitive,battaglia2013simulation}. For instance, when watching a ball bounce off the floor, people naturally expect it to slow down or bounce back depending on its elasticity, even without explicit calculations \cite{battaglia2013simulation,piloto2022intuitive}. 
-Despite rapid advances in deep learning, AI models continue to struggle with structured and interpretable physical reasoning \cite{tung2023physion++,battaglia2013simulation,piloto2022intuitive,melnik2023benchmarks,physicsrw2024}.
-Bridging this gap is crucial for applications in robotics, computer vision, and AI, where models must interpret dynamic scenes and make physically plausible predictions \cite{yi2020clevrer,tung2023physion++,battaglia2013simulation}. 
+Physical reasoning---understanding how objects move, collide, and respond to forces---is central to human cognition and to applications in robotics and vision \cite{yi2020clevrer,tung2023physion++,battaglia2013simulation,piloto2022intuitive}.
+Video--language models are increasingly evaluated on physics-flavored QA, yet high accuracy can reflect \emph{template memorization} or \emph{textual shortcuts} rather than grounded dynamics \cite{tung2023physion++,melnik2023benchmarks,hofherr2023neural}.
+Benchmarks that cannot audit that gap leave readers unsure what their leaderboards measure.
 
+Existing resources each leave part of this gap open.
+CLEVRER~\cite{yi2020clevrer} pioneered causal video QA but abstracts events into symbolic labels without continuous physical parameters.
+COMPHY~\cite{chen2022comphy} supports compositional interventions (including engine re-simulation) but simplifies friction and omits rotational dynamics.
+Physion++~\cite{tung2023physion++} varies properties and scene diversity yet lacks per-frame, taxonomy-structured event labels for fine-grained diagnosis.
+What is missing is a substrate that is simultaneously (i)~controllable and attributed (real-valued parameters + per-frame labels), (ii)~split for domain shift, and (iii)~explicit about which questions can be solved without video.
 
+We introduce \textbf{PHLOP} (Physics-Grounded Hierarchical Labels for Object Properties) to fill that niche.
+PHLOP is not offered as a claim that fine-tuned VLMs ``understand Newtonian physics.''
+It is a \textbf{leak-auditable diagnostic}: a MuJoCo-generated video--QA suite where every answer is tied to simulation logs, every event label sits in a hierarchical taxonomy, and question templates can be partitioned into video-required vs.\ video-optional types (Section~\ref{sec:threats}).
+A researcher using PHLOP can therefore ask---and, with a text-only ablation, quantify---how much of a model's score comes from curricula, physics-hint text, or the question stem itself, rather than from watching the scene.
+That is the value proposition beyond prior benchmarks.
 
-% Existing benchmarks such as CLEVRER~\cite{yi2020clevrer}, COMPHY~\cite{chen2022comphy}, and Physion++~\cite{tung2023physion++} have advanced model evaluation significantly, but remain limited in their interpretability and semantic grounding.
-
-
-Existing benchmarks, such as CLEVRER \cite{yi2020clevrer}, COMPHY \cite{chen2022comphy}, and Physion++ \cite{tung2023physion++}, have significantly advanced our ability to evaluate models on tasks of physical reasoning; however, each comes with its limitations. 
-CLEVRER relies on symbolic labels for events (e.g., ``collision'') that lack explicit physical grounding, making it challenging to analyze fine-grained dynamics \cite{yi2020clevrer}. COMPHY enhances interpretability through compositional physical concepts while simplifying physics by excluding rotational dynamics and approximating friction modeling \cite{chen2022comphy}. Physion++ integrates a wide range of physical properties and scene diversity, yet it lacks per-frame annotations and event-level semantic labeling, limiting interpretability for temporal and causal analysis \cite{tung2023physion++}.
-
-% However, they face limitations in either relying on abstract symbolic events (e.g., high-level labels like "collision" without underlying physical parameters) or focusing on raw dynamics (e.g., trajectories, forces), which lack semantic grounding, making it challenging to align model predictions with human-understandable concepts \cite{tung2023physion++,piloto2022intuitive,melnik2023benchmarks}. 
-
-% Recent work in this area highlights this disconnect, which prevents models from inferring mechanical properties (e.g., friction, elasticity) in human-interpretable terms \cite{tung2023physion++,physicsrw2024}. 
-Recent work highlights this disconnect, as models struggle to infer latent physical properties from purely visual cues \cite{hofherr2023neural} 
-% \cite{ physicsinverse2024, physicsguided2023}
-, or match human-level physical reasoning \cite{benchmarkingInfant2024}.
-For instance, while a physics engine may simulate a bouncing ball using precise coefficients, humans describe the same event in qualitative terms: ``the ball bounces high because it is very elastic'' \cite{battaglia2013simulation,piloto2022intuitive}.
-
-
-To address these limitations, we introduce \textbf{PHLOP} (Physics-Grounded Hierarchical Latent space for Object state and Presentation), a novel benchmark and data set developed from the ground up. PHLOP unifies detailed physical simulation with structured semantic annotations to support hierarchical reasoning over dynamic physical events. Our key contributions include:
+Our contributions are:
 \begin{itemize}
 
-\item \textbf{Physics-grounded Dataset}: PHLOP is a novel benchmark that provides per-object, per-frame data generated from rigid-body simulations. It includes rich physical attributes (e.g., mass, velocity, friction, elasticity) and frame-aligned annotations of physical events grounded in continuous dynamics.
+\item \textbf{Attributed physics substrate:} MuJoCo videos with per-object, per-frame taxonomy labels, real-valued attributes (mass, friction, elasticity, velocity), and an open generator for reproducible scenes.
 
-\item \textbf{Hierarchical physical taxonomy}: We design a structured taxonomy that captures multiple levels of abstraction, from low-level motion and contact dynamics to high-level events, enabling interpretability and flexible supervision.
+\item \textbf{Factor-disjoint splits and graded QA:} Train/val/test regions of the scene-parameter space are deliberately disjoint; questions are tagged by intended reasoning depth for curriculum-style analysis.
 
-
-\item \textbf{Semantic-Physical Alignment}:
-PHLOP maps numerical physical behaviors to interpretable labels, bridging the gap between low-level physics and high-level reasoning tasks.
-
-\item \textbf{Domain-generalization splits}: PHLOP is partitioned into \textsc{train}/\textsc{val}/\textsc{test} sets whose generative factors (shapes, materials and their physical sub-components, object counts, collision modes, floor textures, and camera profiles) are deliberately disjoint, so evaluation measures out-of-distribution generalization rather than memorization.
-
-\item \textbf{Difficulty-graded questions}: Each generated question is annotated with a difficulty label (\textit{easy}/\textit{medium}/\textit{hard}/\textit{very\_hard}) reflecting the depth of reasoning required, enabling curriculum-based analysis.
-
-
-\item \textbf{Model evaluation and learning analysis}: We evaluate open video-language models both zero-shot and under LoRA fine-tuning, with and without textual physics hints, characterizing how curriculum composition and non-visual cues shape physical reasoning.
-
-\item \textbf{Reproducible Simulation Framework}: The project includes a GitHub repository that enables the generation of new scenes with controllable physics. PHLOP provides a reproducible method for creating and recreating specific scenes with various object properties and conditions.
+\item \textbf{Curriculum and cue diagnostic:} Zero-shot and LoRA studies on three open VLMs under four difficulty curricula and two prompting settings (with/without textual physics hints), interpreted as adaptation and cue sensitivity on PHLOP---with explicit disclosure of text-solvable templates rather than a claim of grounded understanding.
 
 \end{itemize}
+
+To support scrutiny and reuse, we will publicly release the scene generator, the question-generation templates (including the per-template validity flags of Section~\ref{sec:threats}), the rendered videos and taxonomy annotations, and the LoRA fine-tuning and evaluation code under a permissive license, with a versioned dataset card documenting known leakage and the answerable/unanswerable split.\footnote{Repository and dataset links are withheld for anonymous review and will be included in the camera-ready version.}
 
 % This paper introduces the PHLOP dataset, describing its structure, taxonomy, simulation platform, and evaluation tools. Our goal is to provide a benchmark that not only supports learning physical dynamics but also connects these dynamics to interpretable, language-grounded reasoning. PHLOP fills a critical gap in the landscape of physical reasoning benchmarks by aligning with both the numerical fidelity of physics engines and the semantic richness needed for human-like understanding.
 
@@ -213,7 +203,7 @@ While these datasets advance multimodal understanding, they are not designed to 
 
 Recent work leverages procedural priors for scene generation and video prediction~\cite{takenaka2023procedural}, suggesting that control over simulation parameters can guide model learning. 
 The design of PHLOP is also inspired by theoretical foundations: simulation-based cognition \cite{battaglia2013simulation}, intuitive physics learning \cite{piloto2022intuitive}, and physics-guided machine learning \cite{physicsguided2023}. Reference material properties are grounded in established engineering and physics resources \cite{ashby2018engineering,callister2020materials,halliday2013physics}, ensuring physical realism in the dataset.  
-PHLOP builds on these advances while addressing critical limitations in existing physical reasoning datasets. Table~\ref{tab:phlop_full_comparison} outlines how the dataset uniquely bridges low-level dynamics and high-level semantics.
+PHLOP builds on these advances while emphasizing denser physical--semantic alignment than most prior VQA-style physics benchmarks. Table~\ref{tab:phlop_full_comparison} summarizes the comparison under the capability definitions in the caption; we mark counterfactual support as partial because PHLOP currently uses verbal what-if prompts rather than engine re-simulation as in ComPhy~\cite{chen2022comphy}.
 
 % t uniquely bridges low-level dynamics and high-level semantics, as systematically outlined in Table~\ref{tab:phlop_full_comparison}.
 
@@ -225,30 +215,27 @@ PHLOP builds on these advances while addressing critical limitations in existing
 % In contrast to \textbf{AGQA}\cite{grunde2021agqa} and \textbf{CATER}\cite{girdhar2019cater}, which focus on high-level scene understanding or action tracking, PHLOP emphasizes physical causality and low-level interaction analysis. While \textbf{PHYRE}\cite{bakhtin2019phyre} offers interactive prediction tasks, it does not support per-frame annotation  organized by a formal taxonomy, or material property inference.
 
 
-PHLOP uniquely enables:
+PHLOP particularly emphasizes:
 
 \begin{itemize}
-    \item \textbf{Per-frame semantic labeling} of object states and transitions—absent in all prior benchmarks.
+    \item \textbf{Per-frame semantic labeling} of object states and transitions under a formal taxonomy.
     \item \textbf{Rotational and frictional event detection}, such as rolling, slipping, or friction-induced halts.
-    \item \textbf{Elastic vs. inelastic collision analysis} using velocity changes and energy loss metrics.
-    \item \textbf{Few-shot material reasoning} via continuous distribution-based sampling across density, elasticity, and friction.
+    \item \textbf{Elastic vs.\ inelastic collision analysis} using velocity changes and energy-loss metrics.
+    \item \textbf{Distribution-based material sampling} across density, elasticity, and friction, enabling property-sensitive questions (some of which still admit textual shortcuts; Section~\ref{sec:threats}).
     \item \textbf{Moving event onset detection}, allowing frame-accurate identification of motion transitions.
 \end{itemize}
 
-
-
-These capabilities enable novel types of questions such as: 
+These capabilities support questions such as:
 \begin{itemize}
     \item ``Which object experienced the greatest kinetic energy loss?''
     \item ``When did the red ball stop rolling?''
 \end{itemize}
 
-
-Such queries require the unified physical and semantic grounding that prior datasets lack. By combining continuous dynamics with interpretable labels, PHLOP offers a scalable, diagnostic benchmark for evaluating grounded physical reasoning in vision-language models.
+By combining continuous dynamics with interpretable labels, PHLOP offers a scalable diagnostic resource for probing how vision--language models adapt to physics-grounded video QA.
 
 
 \section{Methodology}
- In this section, we describe the creation of PHLOP, which involves two core components: (1) the dataset creation process for generating physics-accurate videos with ground truth annotations, and (2) the benchmark evaluation framework for assessing video-language models on physical reasoning tasks.
+In this section, we describe the creation of PHLOP, which involves two core components: (1) the dataset creation process for generating physics-accurate videos with ground-truth annotations, and (2) the diagnostic evaluation framework for probing video--language models on physics-grounded video QA.
 
 
 % \vspace{-1.9em} 
@@ -631,7 +618,7 @@ PHLOP includes a built-in module for automatic question generation based on the 
     \item \textbf{Energy \& Loss}: e.g., ``What percentage of system kinetic energy was lost in a collision?''
 \end{itemize}
 
-Unlike symbolic QA in CLEVRER~\cite{yi2020clevrer}, PHLOP's questions are grounded in both semantic labels and physical data. This allows richer evaluation of model understanding across symbolic, causal, and physical domains. The questions and the respective correct answers are unambiguous because of their grounding in the simulation data, enabling evaluation of both the language and the compositional physical understanding.
+Unlike symbolic QA in CLEVRER~\cite{yi2020clevrer}, PHLOP's questions are grounded in both semantic labels and physical data. Correct answers are derived from simulation logs, so scoring is automatic and reproducible. Not every template equally requires visual dynamics; we discuss video-optional and answer-leaking types in Section~\ref{sec:threats}.
 
 
 \subsubsection{Question Difficulty Annotation}
@@ -662,7 +649,7 @@ Critically, the physics hint provides contextual cues but not the correct answer
 
 \subsubsection{Fine-tuning Protocol and Difficulty Ablation}
 \label{sec:finetune}
-We  \textbf{LoRA-fine-tune} three open vision--language models---\textbf{SmolVLM}, \textbf{Qwen2-VL}, and \textbf{InternVL3} - on PHLOP, to see how the mix of question difficulties used for training affects physical reasoning. We train four versions of each model that differ only in which difficulties they are trained on (Table~\ref{tab:ftconfig}): \textit{easy}, \textit{easy+medium}, \textit{hard}, or \textit{full} (all difficulties). While a model is training, we track its accuracy on the difficulties it was \emph{not} trained on and use that to decide when to stop. We then test every model- and the original zero-shot model -on the test set, and this test set includes questions of \emph{all} difficulties. In other words, the curriculum name only says what a model was \emph{trained} on; all models are \emph{tested} on the same complete test set (Section~\ref{sec:finetune-results}). This lets us measure two kinds of generalization: to new scenes (new materials, shapes, and camera views; Table~\ref{tab:splits}) and to question difficulties the model never saw in training (Table~\ref{tab:ftconfig}).
+We  \textbf{LoRA-fine-tune} three open vision--language models---\textbf{SmolVLM}, \textbf{Qwen2-VL}, and \textbf{InternVL3}---on PHLOP, to see how the mix of question difficulties used for training affects accuracy on this diagnostic suite. We train four versions of each model that differ only in which difficulties they are trained on (Table~\ref{tab:ftconfig}): \textit{easy}, \textit{easy+medium}, \textit{hard}, or \textit{full} (all difficulties). While a model is training, we track its accuracy on the difficulties it was \emph{not} trained on and use that to decide when to stop. We then test every model- and the original zero-shot model -on the test set, and this test set includes questions of \emph{all} difficulties. In other words, the curriculum name only says what a model was \emph{trained} on; all models are \emph{tested} on the same complete test set (Section~\ref{sec:finetune-results}). This lets us measure two kinds of generalization: to new scenes (new materials, shapes, and camera views; Table~\ref{tab:splits}) and to question difficulties the model never saw in training (Table~\ref{tab:ftconfig}).
 
 \begin{table}[t]
 \centering
@@ -687,14 +674,14 @@ Each curriculum is run under the two prompting settings of Section~\ref{sec:prom
 \section{Results}
 \label{sec:finetune-results}
 
-We report accuracy exactly as produced by the official PHLOP evaluator on the held-out \textsc{test} split. For every model we compare five conditions---the non-fine-tuned \emph{zero-shot} baseline plus the four LoRA curricula of Table~\ref{tab:ftconfig} (\textit{easy}, \textit{easy+medium}, \textit{hard}, and \textit{full}/all-tasks)---each under the two prompting settings of Section~\ref{sec:prompt-types} (no physics hint / physics-augmented). Beyond a single overall score, the evaluator also reports accuracy separately for each \emph{test-question difficulty} (Easy, Medium, Hard, Very hard), which lets us see not only \emph{how much} fine-tuning helps but \emph{where} it helps.
+We report accuracy exactly as produced by the official PHLOP evaluator on the held-out \textsc{test} split. For every model we compare five conditions---the non-fine-tuned \emph{zero-shot} baseline plus the four LoRA curricula of Table~\ref{tab:ftconfig} (\textit{easy}, \textit{easy+medium}, \textit{hard}, and \textit{full}/all-tasks)---each under the two prompting settings of Section~\ref{sec:prompt-types} (no physics hint / physics-augmented). Beyond a single overall score, the evaluator also reports accuracy separately for each \emph{test-question difficulty} (Easy, Medium, Hard, Very hard). We treat these results as a \textbf{curriculum- and cue-sensitivity diagnostic}: they show how VLMs adapt to PHLOP under LoRA and textual hints, not that high scores imply grounded Newtonian understanding (Section~\ref{sec:threats}).
 
 \paragraph{Static-camera caveat.}
-All experiments use the \texttt{static} (fixed-viewpoint) render, so the difficulty ablation is a like-for-like comparison under one camera. A side effect is that a small fraction of questions ($\approx 11\%$) refer to an object or event that the fixed viewpoint does not capture---it happens off-screen or behind an occluder---making them effectively unanswerable from the static view; this is a matter of camera coverage, not reasoning. Rendering the same scenes with the \texttt{moving} (orbiting) camera would recover many of these cases and is left to future work.
+All experiments use the \texttt{static} (fixed-viewpoint) render, so the difficulty ablation is a like-for-like comparison under one camera. A side effect is that a fraction of questions ($\approx 11\%$) refer to an object or event that the fixed viewpoint does not capture---off-screen or behind an occluder---making them effectively unanswerable from the static view. These items remain in the reported overall accuracy; we do not recompute a filtered metric here. Rendering the same scenes with the \texttt{moving} (orbiting) camera would recover many of these cases and is left to future work.
 
 \subsection{Overall Model Performance}
 
-Table~\ref{tab:finetune-ablation} reports overall accuracy for all three models across the five conditions and both prompting settings, and Figure~\ref{fig:overall-heatmap} shows the complete picture broken down by test-question difficulty. Three findings stand out. First, \textbf{zero-shot physical reasoning is weak}: without fine-tuning, the models score between $17.8\%$ and $32.9\%$ overall---at or near chance for the multiple-choice format---confirming that off-the-shelf VLMs do not solve PHLOP. Second, \textbf{LoRA fine-tuning closes most of this gap}: the best configuration reaches $91.2\%$ for InternVL3, $88.3\%$ for SmolVLM, and $64.0\%$ for the more brittle Qwen2-VL. Third, the \textbf{best curriculum is model-dependent}: SmolVLM peaks under the all-tasks (\textit{full}) curriculum, whereas InternVL3 and Qwen2-VL peak marginally under \textit{easy+medium} ($92.0\%$ and $68.2\%$ with hints), with \textit{full} a close second. The difficulty breakdown in Figure~\ref{fig:overall-heatmap} also reveals a counter-intuitive pattern: after fine-tuning, the \emph{Hard} and \emph{Very hard} tiers are often answered at near-ceiling accuracy (InternVL3 exceeds $99\%$ on \emph{Hard} and reaches $100\%$ on \emph{Very hard}), while the \emph{Easy} tier lags (e.g.\ $71.7\%$ for InternVL3 without hints). The human-oriented \emph{difficulty} labels (reasoning depth) therefore do not track empirical model difficulty: the hardest-labelled tiers are dominated by templates the models learn to answer reliably, whereas some ``easy'' perception and counting questions remain visually challenging.
+Table~\ref{tab:finetune-ablation} reports overall accuracy for all three models across the five conditions and both prompting settings, and Figure~\ref{fig:overall-heatmap} shows the complete picture broken down by test-question difficulty. Three findings stand out. First, \textbf{zero-shot accuracy is weak}: without fine-tuning, the models score between $17.8\%$ and $32.9\%$ overall---at or near chance for the multiple-choice format---confirming that off-the-shelf VLMs do not solve PHLOP. Second, \textbf{LoRA fine-tuning raises accuracy substantially}: the best configuration reaches $91.2\%$ for InternVL3, $88.3\%$ for SmolVLM, and $64.0\%$ for the more brittle Qwen2-VL. Third, the \textbf{best curriculum is model-dependent}: SmolVLM peaks under the all-tasks (\textit{full}) curriculum, whereas InternVL3 and Qwen2-VL peak marginally under \textit{easy+medium} ($92.0\%$ and $68.2\%$ with hints), with \textit{full} a close second. The difficulty breakdown in Figure~\ref{fig:overall-heatmap} also reveals a pattern that cautions against over-interpreting ceiling scores: after fine-tuning, the \emph{Hard} and \emph{Very hard} tiers are often answered at near-ceiling accuracy (InternVL3 exceeds $99\%$ on \emph{Hard} and reaches $100\%$ on \emph{Very hard}), while the \emph{Easy} tier lags (e.g.\ $71.7\%$ for InternVL3 without hints). Human-oriented \emph{difficulty} labels (intended reasoning depth) therefore do not track empirical model difficulty. Near-ceiling performance on the hardest-labelled tiers is consistent with \textbf{template learning}---several hard templates can be answered from the question text alone (Section~\ref{sec:threats})---whereas some ``easy'' perception and counting questions remain visually challenging.
 
 \begin{table*}[t]
 \centering
@@ -722,7 +709,7 @@ Model & Physics hint & Baseline & Easy & Easy+Med & Hard & Full \\
 \begin{figure*}[t]
     \centering
     \includegraphics[width=0.95\textwidth]{heatmap_absolute_accuracy.pdf}
-    \caption{\textbf{Fine-tuning accuracy across task difficulty} (official evaluator, \% correct; higher is better). Rows are curricula (baseline plus the four training sets); columns are the overall score and the four test-question difficulty tiers; the left block is physics-augmented, the right block no-physics. Fine-tuning on all tasks gives consistently high accuracy across tiers, and the hardest tiers are answered at near-ceiling once fine-tuned.}
+    \caption{\textbf{Fine-tuning accuracy across task difficulty} (official evaluator, \% correct; higher is better). Rows are curricula (baseline plus the four training sets); columns are the overall score and the four test-question difficulty tiers; the left block is physics-augmented, the right block no-physics. Near-ceiling Hard/Very-hard scores after fine-tuning should be read alongside the template-learning caveat in Section~\ref{sec:threats}.}
     \label{fig:overall-heatmap}
 \end{figure*}
 
@@ -754,14 +741,14 @@ Figure~\ref{fig:improvement-heatmap} expresses each fine-tuned score as its gain
 \begin{figure*}[t]
     \centering
     \includegraphics[width=0.95\textwidth]{heatmap_improvement_over_baseline.pdf}
-    \caption{\textbf{Improvement over each model's own baseline} (percentage points; green $=$ improvement). Layout as in Figure~\ref{fig:overall-heatmap}. Almost every fine-tuned cell improves; the largest gains are on the InternVL3 backbone and on the harder difficulty tiers.}
+    \caption{\textbf{Improvement over each model's own baseline} (percentage points; green $=$ improvement). Layout as in Figure~\ref{fig:overall-heatmap}. Almost every fine-tuned cell improves; large Hard/Very-hard gains should be interpreted with the template-learning caveat in Section~\ref{sec:threats}.}
     \label{fig:improvement-heatmap}
 \end{figure*}
 
 
 \subsection{Effect of Physics Augmentation}
 
-Figure~\ref{fig:physics-dumbbell} connects each model's no-physics score to its physics-augmented score for every curriculum and difficulty tier; a teal segment is a gain, a red segment a regression. The benefit of physics hints is strongly model-dependent. Qwen2-VL gains the most---up to roughly $+22$ to $+25$ points overall on the \textit{easy} and \textit{easy+medium} curricula---suggesting it leans on the textual parameters to compensate for weaker visual grounding. SmolVLM and InternVL3 show smaller, mostly positive shifts ($\sim\!+3$ to $+7$ points under the stronger curricula). Crucially, the hint is not uniformly helpful: at the zero-shot baseline it is neutral or slightly harmful (e.g.\ $-4.9$ points for Qwen2-VL, $-1.3$ for InternVL3), because the hint deliberately lists parameters for \emph{all} objects---including distractors---so a model that cannot isolate the relevant object is misled rather than helped. This matches the prompt design of Section~\ref{sec:prompt-types}: the hint supplies context, not the answer.
+Figure~\ref{fig:physics-dumbbell} connects each model's no-physics score to its physics-augmented score for every curriculum and difficulty tier; a teal segment is a gain, a red segment a regression. The benefit of physics hints is strongly model-dependent. Qwen2-VL gains the most---up to roughly $+22$ to $+25$ points overall on the \textit{easy} and \textit{easy+medium} curricula---consistent with greater reliance on textual parameters when visual grounding is weak. SmolVLM and InternVL3 show smaller, mostly positive shifts ($\sim\!+3$ to $+7$ points under the stronger curricula). We treat this pattern as \textbf{suggestive of text reliance}, not as a causal proof of shortcut exploitation: physics hints can also legitimately aid grounding, and we do not run a controlled hint-ablation that would disentangle the two. Crucially, the hint is not uniformly helpful: at the zero-shot baseline it is neutral or slightly harmful (e.g.\ $-4.9$ points for Qwen2-VL, $-1.3$ for InternVL3), because the hint deliberately lists parameters for \emph{all} objects---including distractors---so a model that cannot isolate the relevant object is misled rather than helped. This matches the prompt design of Section~\ref{sec:prompt-types}: the hint supplies context, not the answer.
 
 \begin{figure*}[t]
     \centering
@@ -784,11 +771,39 @@ Finally, Figure~\ref{fig:consistency} summarizes how much the three backbones ag
 
 \section{Limitations and Future Work}
 
-PHLOP currently supports rigid-body dynamics with detailed rule-based annotations. Future extensions should explore deformable bodies, fluid interactions, and differentiable physics engines, significantly broadening the benchmark’s scope and realism~\cite{tung2023physion++}. 
-While PHLOP emphasizes object states and parameterized properties, broader benchmarks such as PhysicsRW \cite{physicsrw2024}, and PhysReason \cite{physreason2024} point toward evaluating reasoning under novelty, open-world generalization, and multi-step causal chains. Integrating PHLOP with robotic manipulation tasks and real-world scene generalization could provide further validation of physical reasoning capabilities. 
-Finally, incorporating open-ended language generation and learned classifiers for automatic semantic annotation could also enhance interpretability and generalization, laying the foundations for more robust, physically grounded AI systems.
+PHLOP currently supports rigid-body dynamics with detailed rule-based annotations. Future extensions should explore deformable bodies, fluid interactions, and differentiable physics engines, broadening the benchmark's scope and realism~\cite{tung2023physion++}.
+Broader benchmarks such as PhysicsRW~\cite{physicsrw2024} and PhysReason~\cite{physreason2024} point toward evaluating reasoning under novelty and multi-step causal chains; integrating PHLOP with robotic manipulation or real-world scenes remains future work.
+Open-ended generation and learned classifiers for semantic annotation could further improve scalability.
 
-Our experimental study also carries several caveats that temper the conclusions above. \textbf{(i)~Parameter-efficient adaptation:} we use LoRA rather than full fine-tuning to remain within a single-A100 budget, so the reported ceilings are lower bounds on what each backbone could achieve. \textbf{(ii)~Single-run estimates:} each model--curriculum--prompt configuration is trained once; we therefore do not report variance across seeds, and small differences between conditions should be read as indicative rather than definitive. \textbf{(iii)~Observational comparison:} the three backbones differ in scale, pretraining data, and frame sampling, so cross-model gaps reflect those factors as much as architecture, and we draw conclusions chiefly from within-model trends (curriculum and physics-hint effects). \textbf{(iv)~Question imbalance:} the automatically generated templates are skewed toward stationary-duration and onset queries, and the difficulty tiers are unevenly populated, so a single overall score can be dominated by a few categories; the per-difficulty breakdowns (Figures~\ref{fig:overall-heatmap} and~\ref{fig:radar-permodel}) mitigate but do not eliminate this effect. Addressing these points---full fine-tuning, multi-seed runs, balanced sampling, and a larger model pool---is a natural direction for future work, alongside examining how physics-aware inductive biases, structured taxonomies, and simulation-grounded data bridge the gap between perceptual recognition and physically grounded understanding.
+\subsection{Threats to Validity}
+\label{sec:threats}
+
+We state these threats explicitly so that the reported accuracies are not over-read as evidence of grounded physical understanding.
+
+\begin{itemize}
+    \item \textbf{Answer-leaking and video-optional templates.}
+    Several automatically generated types can be solved with little or no visual dynamics: e.g., \texttt{momentum\_conservation} embeds the momentum ratio in the question stem; \texttt{newtons\_second\_law} is a textbook prompt independent of the video; \texttt{property\_competition} pastes numeric mass and friction into the stem. Near-ceiling accuracy on Hard/Very-hard tiers after fine-tuning is therefore consistent with template learning. A text-only (no-video) ablation and a leak-filtered evaluation are left to future work and are \emph{not} claimed here.
+
+    \item \textbf{Verbal counterfactuals, not re-simulation.}
+    PHLOP's ``counterfactual'' items are formula- or direction-of-change prompts (e.g., friction/velocity scaling), not engine interventions that remove an object and re-simulate as in ComPhy~\cite{chen2022comphy}.
+
+    \item \textbf{Unanswerable static-view questions.}
+    Approximately $11\%$ of test questions refer to off-screen or occluded events under the static camera and remain in the reported overall accuracy (Section~\ref{sec:finetune-results}).
+
+    \item \textbf{Single-seed LoRA and limited model pool.}
+    Each configuration is trained once with parameter-efficient adaptation on three small open VLMs; we report point estimates without seed variance, and we do not evaluate closed SOTA video--language models or a human baseline.
+
+    \item \textbf{Confounded OOD split.}
+    Train and test differ simultaneously in shapes, materials, object counts, cameras, collision modes, and floors, so failures cannot be attributed to a single factor. Factor-wise leave-one-out ablations are future work.
+
+    \item \textbf{Unquantified annotation QA.}
+    Taxonomy labels are rule-based from simulation logs; manual review covered only a sampled subset without reported inter-annotator agreement or error rates.
+
+    \item \textbf{Question imbalance.}
+    The $25{,}436$-question \textsc{test} split spans $26$ templates but is heavily skewed: a degenerate \texttt{unknown} bucket accounts for $2{,}801$ items ($11.0\%$; $22{,}635$ remain after excluding it), and among those remaining templates the five most frequent still cover $43.6\%$ of questions. The long tail is correspondingly sparse---templates such as \texttt{event\_sequence} and \texttt{property\_competition} contribute fewer than $60$ items each ($<0.3\%$). Because difficulty tiers are also unevenly populated, a micro-averaged overall accuracy can be dominated by a handful of high-frequency, low-depth categories; we therefore recommend reading the per-template breakdown alongside the aggregate.
+\end{itemize}
+
+Addressing these threats---text-only and leak-filtered evals, human baselines, multi-seed runs, factor-wise OOD probes, and rebuilt hard-tier questions that require video evidence---is the natural next step for strengthening PHLOP as a physics-reasoning benchmark.
 
 
 
