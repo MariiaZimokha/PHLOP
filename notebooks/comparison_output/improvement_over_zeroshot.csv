@@ -1,0 +1,25 @@
+model,physics,condition,zero_shot_acc,answer_accuracy,abs_gain_pp,rel_gain_pct
+SmolVLM,No physics hint,Easy,0.2459,0.6143,36.84,149.8
+SmolVLM,No physics hint,Easy+Med,0.2459,0.6935,44.76,182.0
+SmolVLM,No physics hint,Hard,0.2459,0.5561,31.02,126.1
+SmolVLM,No physics hint,Full,0.2459,0.8243,57.84,235.2
+Qwen2-VL,No physics hint,Easy,0.1307,0.1009,-2.98,-22.8
+Qwen2-VL,No physics hint,Easy+Med,0.1307,0.3933,26.26,200.9
+Qwen2-VL,No physics hint,Hard,0.1307,0.2954,16.47,126.0
+Qwen2-VL,No physics hint,Full,0.1307,0.4565,32.58,249.3
+InternVL3,No physics hint,Easy,0.146,0.613,46.7,319.9
+InternVL3,No physics hint,Easy+Med,0.146,0.8427,69.67,477.3
+InternVL3,No physics hint,Hard,0.146,0.8245,67.86,464.9
+InternVL3,No physics hint,Full,0.146,0.8228,67.68,463.7
+SmolVLM,With physics hint,Easy,0.2463,0.667,42.07,170.8
+SmolVLM,With physics hint,Easy+Med,0.2463,0.7751,52.88,214.7
+SmolVLM,With physics hint,Hard,0.2463,0.5401,29.39,119.3
+SmolVLM,With physics hint,Full,0.2463,0.8688,62.26,252.8
+Qwen2-VL,With physics hint,Easy,0.0761,0.38,30.39,399.2
+Qwen2-VL,With physics hint,Easy+Med,0.0761,0.6423,56.62,743.8
+Qwen2-VL,With physics hint,Hard,0.0761,0.4456,36.95,485.4
+Qwen2-VL,With physics hint,Full,0.0761,0.5959,51.98,682.8
+InternVL3,With physics hint,Easy,0.1311,0.6436,51.25,391.0
+InternVL3,With physics hint,Easy+Med,0.1311,0.9104,77.94,594.6
+InternVL3,With physics hint,Hard,0.1311,0.8706,73.95,564.1
+InternVL3,With physics hint,Full,0.1311,0.9006,76.96,587.1

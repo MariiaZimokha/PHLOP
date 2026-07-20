@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from tqdm import tqdm
 
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, CommitOperationAdd
 from huggingface_hub.utils import HfHubHTTPError
 
 from phlop.simulator import Simulation
@@ -48,25 +48,30 @@ def atomic_write_json(data, path):
     shutil.move(temp_name, path)
 
 
+def _is_retryable_upload_error(e: Exception) -> bool:
+    """True if we should retry (rate limit, server error, or timeout)."""
+    if isinstance(e, HfHubHTTPError) and e.response is not None:
+        if e.response.status_code == 429:
+            return True
+        if e.response.status_code >= 500:
+            return True
+        if e.response.status_code == 504:
+            return True  # Gateway Timeout
+    if isinstance(e, (RuntimeError, OSError)):
+        return True
+    msg = str(e).lower()
+    if "timeout" in msg or "timed out" in msg:
+        return True
+    return False
+
+
 def upload_with_retry(fn, retries=8, base_sleep=8):
     for i in range(retries):
         try:
             return fn()
-        except (HfHubHTTPError, RuntimeError) as e:
-            # check for 429 (Too Many Requests) or 500+ server errors
-            is_rate_limit = (
-                isinstance(e, HfHubHTTPError)
-                and e.response is not None
-                and e.response.status_code == 429
-            )
-            is_server_error = (
-                isinstance(e, HfHubHTTPError)
-                and e.response is not None
-                and e.response.status_code >= 500
-            )
-
-            if is_rate_limit or is_server_error:
-                sleep_time = base_sleep * (2**i)  # Exponential backoff
+        except Exception as e:
+            if _is_retryable_upload_error(e):
+                sleep_time = base_sleep * (2**i)
                 print(
                     f"⚠️  Upload snag (Attempt {i + 1}/{retries}). Sleeping {sleep_time}s... Error: {e}"
                 )
@@ -77,7 +82,12 @@ def upload_with_retry(fn, retries=8, base_sleep=8):
 
 
 def upload_shard_folder(shard_id: int, shard_dir: Path, repo_id: str, split: str):
-    print(f"\n⬆️  Preparing Large Folder Upload for {split} Shard {shard_id}...")
+    """
+    Zip the shard and upload a single archive (Solution 1).
+    One API request per shard, avoids 429 rate limits. Parquet paths
+    (data/{split}/shard_XXXX/...) match the structure inside the zip.
+    """
+    print(f"\n⬆️  Zipping and Uploading {split} Shard {shard_id}...")
 
     staging_root = Path("temp_staging")
     repo_structure_path = staging_root / "data" / split / f"shard_{shard_id:04d}"
@@ -89,23 +99,96 @@ def upload_shard_folder(shard_id: int, shard_dir: Path, repo_id: str, split: str
     for item in shard_dir.iterdir():
         shutil.move(str(item), str(repo_structure_path / item.name))
 
+    zip_filename = f"{split}_shard_{shard_id:04d}"
+    zip_dir = Path(tempfile.mkdtemp())
+    zip_base = zip_dir / zip_filename
+    zip_filepath = shutil.make_archive(str(zip_base), "zip", str(staging_root))
+
+    repo_path = f"data/{split}/{zip_filename}.zip"
+
     try:
-        print(f"🚀 Committing large folder to {repo_id}...")
+        print(f"🚀 Uploading single archive to {repo_id} ({repo_path})...")
         upload_with_retry(
-            lambda: HF_API.upload_large_folder(
-                folder_path=str(staging_root),
+            lambda: HF_API.upload_file(
+                path_or_fileobj=zip_filepath,
+                path_in_repo=repo_path,
                 repo_id=repo_id,
                 repo_type="dataset",
             )
         )
-
         print(f"  ✅ Shard {shard_id} upload complete!")
         return True
     except Exception as e:
         print(f"  ❌ Failed to upload shard {shard_id}: {e}")
         return False
     finally:
-        # Cleanup staging
+        if staging_root.exists():
+            shutil.rmtree(staging_root)
+        if os.path.exists(zip_filepath):
+            os.remove(zip_filepath)
+        if zip_dir.exists():
+            try:
+                shutil.rmtree(zip_dir)
+            except OSError:
+                pass
+
+
+def upload_shard_folder_throttled(shard_id: int, shard_dir: Path, repo_id: str, split: str):
+    """
+    Upload shard as raw files in small batches with sleep (Solution 2).
+    Use only if you must keep the raw folder structure on HF and cannot use zips.
+    """
+    print(f"\n⬆️  Preparing Throttled Upload for {split} Shard {shard_id}...")
+
+    staging_root = Path("temp_staging")
+    repo_structure_path = staging_root / "data" / split / f"shard_{shard_id:04d}"
+
+    if staging_root.exists():
+        shutil.rmtree(staging_root)
+    repo_structure_path.mkdir(parents=True)
+
+    for item in shard_dir.iterdir():
+        shutil.move(str(item), str(repo_structure_path / item.name))
+
+    operations = []
+    for filepath in repo_structure_path.rglob("*"):
+        if filepath.is_file():
+            relative_path = filepath.relative_to(repo_structure_path)
+            repo_path = f"data/{split}/shard_{shard_id:04d}/{relative_path}"
+            operations.append(
+                CommitOperationAdd(path_in_repo=repo_path, path_or_fileobj=str(filepath))
+            )
+
+    if not operations:
+        print("⚠️ No files found to upload.")
+        if staging_root.exists():
+            shutil.rmtree(staging_root)
+        return True
+
+    BATCH_SIZE = 10  # Small batches to stay under read timeout when uploading .mp4s
+    total_batches = (len(operations) + BATCH_SIZE - 1) // BATCH_SIZE
+    print(f"🚀 Found {len(operations)} files. Uploading in {total_batches} batches...")
+
+    try:
+        for i in range(0, len(operations), BATCH_SIZE):
+            batch = operations[i : i + BATCH_SIZE]
+            batch_num = (i // BATCH_SIZE) + 1
+            upload_with_retry(
+                lambda b=batch, n=batch_num: HF_API.create_commit(
+                    repo_id=repo_id,
+                    repo_type="dataset",
+                    operations=b,
+                    commit_message=f"Upload {split} shard {shard_id} - batch {n}/{total_batches}",
+                )
+            )
+            print(f"  ✅ Batch {batch_num}/{total_batches} uploaded.")
+            time.sleep(2.0)  # Throttle between batches to avoid rate limits and timeouts
+        print(f"🎉 Shard {shard_id} upload completely finished!")
+        return True
+    except Exception as e:
+        print(f"  ❌ Failed to upload shard {shard_id}: {e}")
+        return False
+    finally:
         if staging_root.exists():
             shutil.rmtree(staging_root)
 
@@ -280,12 +363,14 @@ def generate_training_shard(shard_id, start_idx, count):
             split="train",
         )
         # print("out ", out)
+        shard_file = f"data/train/train_shard_{shard_id:04d}.zip"
         rows.append(
             {
                 "id": global_idx,
                 "split": "train",
                 "camera_mode": cam_mode,
                 "num_objects": num_objects,
+                "shard_file": shard_file,
                 "videos": {
                     cam_mode: f"data/train/shard_{shard_id:04d}/train_{global_idx}/simulation_objects.mp4"
                 },
@@ -309,11 +394,28 @@ def generate_training_shard(shard_id, start_idx, count):
 
     print(f"✅ Saved parquet: {parquet_filename}")
 
+    # Upload parquet index to repo root so load_dataset() can discover the dataset
+    try:
+        upload_with_retry(
+            lambda: HF_API.upload_file(
+                path_or_fileobj=str(parquet_path),
+                path_in_repo=parquet_filename,
+                repo_id=HF_REPO,
+                repo_type="dataset",
+            )
+        )
+        print(f"  ✅ Uploaded {parquet_filename} to repo root.")
+    except Exception as e:
+        print(f"  ❌ Failed to upload parquet: {e}")
+
+    # One zip per shard (same as val/test)
     success = upload_shard_folder(
-        shard_id=shard_id, shard_dir=OUTPUT_DIR, repo_id=HF_REPO, split="train"
+        shard_id=shard_id,
+        shard_dir=OUTPUT_DIR,
+        repo_id=HF_REPO,
+        split="train",
     )
 
-    # Safe cleanup
     if success:
         print("Cleaning up local data...")
         shutil.rmtree(OUTPUT_DIR)
@@ -338,7 +440,7 @@ def generate_validation_shard(shard_id, start_idx, count, split):
         # camera_cfg = sample_camera(split, "static")
         camera_cfg = sample_camera_for_split(split=split, mode="static")
 
-        print("camera_cfg ", camera_cfg)
+        # print("camera_cfg ", camera_cfg)
 
         out_static = run_single_simulation(
             sim=sim,
@@ -371,12 +473,13 @@ def generate_validation_shard(shard_id, start_idx, count, split):
             split=split,
         )
 
+        shard_file = f"data/{split}/{split}_shard_{shard_id:04d}.zip"
         rows.append(
             {
                 "id": global_idx,
                 "split": split,
                 "num_objects": num_objects,
-                # Static
+                "shard_file": shard_file,
                 "videos": {
                     "static": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/static/simulation_objects.mp4",
                     "moving": f"data/{split}/shard_{shard_id:04d}/{split}_{global_idx}/moving/simulation_objects.mp4",
@@ -403,7 +506,21 @@ def generate_validation_shard(shard_id, start_idx, count, split):
 
     print(f"✅ Generated {split} shard {shard_id} locally.")
 
-    # Single Upload Call (Folder)
+    # Upload parquet index to repo root so load_dataset() can discover the dataset
+    try:
+        upload_with_retry(
+            lambda: HF_API.upload_file(
+                path_or_fileobj=str(parquet_path),
+                path_in_repo=parquet_filename,
+                repo_id=HF_REPO,
+                repo_type="dataset",
+            )
+        )
+        print(f"  ✅ Uploaded {parquet_filename} to repo root.")
+    except Exception as e:
+        print(f"  ❌ Failed to upload parquet: {e}")
+
+    # One zip per shard (metadata in parquet at repo root; lazy extraction in dataloader)
     success = upload_shard_folder(
         shard_id=shard_id,
         shard_dir=OUTPUT_DIR,

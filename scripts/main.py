@@ -76,7 +76,7 @@ def parse_args() -> argparse.Namespace:
         "--duration",
         type=int,
         default=8,
-        help=("Video duration is seconds (default: 15)"),
+        help=("Video duration in seconds (default: 8)"),
     )
     parser.add_argument(
         "--camera_mode",

@@ -12,3 +12,4 @@ tqdm
 ruff
 pyarrow
 fastparquet
+huggingface-hub

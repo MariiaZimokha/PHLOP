@@ -1,0 +1,138 @@
+% =====================================================================
+%  PHLOP -- updated Methodology / Results text
+%  Reflects the changes made AFTER the original submission:
+%    * train/val/test domain-generalization split (phlop/split_config.py)
+%    * per-question difficulty labels      (phlop/question_answer.py,
+%                                            phlop/advanced_physics_questions.py)
+%    * difficulty-based fine-tuning ablation (notebooks/phlop_eval_common.py
+%                                             -> FINE_TUNE_CONFIGS)
+%    * static / moving camera modes
+%    * physics-hint prompting toggle for fine-tuning
+%    * new, *fine-tuned* model set: SmolVLM, Qwen2-VL, InternVL3
+%  Requires: \usepackage{booktabs}  \usepackage{multirow}
+% =====================================================================
+
+% ---------------------------------------------------------------------
+% WHAT CHANGED vs. the original submission (for the author; delete before
+% camera-ready). The original paper described a single pool of 4,000 videos
+% evaluated *zero-shot* with four prompting conditions over three off-the-shelf
+% models (InternVideo2.5-8B, InternVL3-2B, Video-LLaMA3-7B). The revision adds:
+%   1. An explicit, disjoint train/val/test split for domain generalization.
+%   2. A per-question difficulty annotation (easy/medium/hard/very_hard).
+%   3. A LoRA fine-tuning study over four difficulty curricula, with validation
+%      on the held-out difficulties, under two prompting settings.
+%   4. A new fine-tuned model set (SmolVLM, Qwen2-VL, InternVL3).
+% ---------------------------------------------------------------------
+
+
+% =====================================================================
+\subsection{Dataset Splits for Domain Generalization}
+% (Insert into Section III-A, after "Parameter Sampling".)
+% =====================================================================
+
+To evaluate \emph{generalization} rather than memorization, PHLOP is partitioned
+into \textsc{train}, \textsc{val}, and \textsc{test} splits whose generative
+factors are deliberately \emph{disjoint}. Rather than randomly partitioning a
+single pool of scenes, each split draws from a different region of the scene
+parameter space: distinct object shapes, materials, per-material physical
+sub-components (e.g.\ different metal alloys), object-count ranges, collision
+modes, floor textures, and camera profiles. Consequently, a model is tested on
+material--shape--viewpoint combinations it never saw during training
+(e.g.\ \texttt{rubber} and \texttt{block} objects, and an ``extreme'' camera
+profile, appear \emph{only} in the test split). Table~\ref{tab:splits}
+summarizes the configuration; the full specification is released in
+\texttt{split\_config.py}.
+
+\begin{table}[t]
+\centering
+\caption{Disjoint generative factors per split, enforcing
+domain-generalization evaluation. Material sub-components (e.g.\ metal alloys)
+are also disjoint across splits, so even shared material categories use
+different physical-parameter regions.}
+\label{tab:splits}
+\small
+\begin{tabular}{llll}
+\toprule
+Factor & Train & Val & Test \\
+\midrule
+Shapes        & ball, cube, cyl.   & ball, cube         & block, cyl., cube \\
+Materials     & metal, wood, plastic & metal, wood, glass & glass, rubber \\
+\#Objects     & 2--6               & 2--5               & 3--7 \\
+Camera        & broad              & narrow             & extreme \\
+Collisions    & coll./slide/stat.  & coll./slide        & coll./offset/slide \\
+Floor         & checker/flat       & flat/gradient      & checker/gradient \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Every scene is additionally rendered under two \textbf{camera modes}---a
+\texttt{static} fixed-viewpoint render and a \texttt{moving} (orbiting) render---
+allowing the same physical event to be probed under different visual coverage.
+All experiments reported here use the \texttt{static} mode.
+
+
+% =====================================================================
+\subsection{Question Difficulty Annotation}
+% (Insert into Section III-B, after "Automatic Question Generation".)
+% =====================================================================
+
+Each automatically generated question is tagged with a \textbf{difficulty}
+label---\textit{easy}, \textit{medium}, \textit{hard}, or \textit{very\_hard}---
+reflecting the depth of reasoning required rather than surface form. The label is
+assigned by the question generator from the reasoning type:
+
+\begin{itemize}
+  \item \textbf{Easy}: single-step perception and counting (object count, rolling
+        detection, stopped-object count, collision presence).
+  \item \textbf{Medium}: property comparison and attribute inference
+        (e.g.\ highest-friction object, velocity/friction scaling).
+  \item \textbf{Hard} / \textbf{very\_hard}: multi-step physical reasoning over
+        continuous dynamics (momentum/energy conservation, multi-hop causation,
+        temporal-event ordering).
+\end{itemize}
+
+These labels are the basis of the fine-tuning curriculum in
+Section~\ref{sec:finetune}.
+
+
+% =====================================================================
+\subsection{Fine-tuning Protocol and Difficulty Ablation}
+\label{sec:finetune}
+% (Replaces / extends Section III-B-3 "Evaluation Protocol".)
+% =====================================================================
+
+Whereas our initial evaluation was restricted to zero-shot inference, we now
+\textbf{LoRA-fine-tune} three open vision--language models---\textbf{SmolVLM},
+\textbf{Qwen2-VL}, and \textbf{InternVL3}---on PHLOP and study how the
+\emph{difficulty composition} of the training data affects physical reasoning.
+We define four training curricula (Table~\ref{tab:ftconfig}). To measure
+generalization \emph{across difficulty}, each model is validated on the
+difficulties \emph{held out} of its training set; the \textit{full} curriculum
+trains on all difficulties with no difficulty held out.
+
+\begin{table}[t]
+\centering
+\caption{Fine-tuning curricula over question difficulty. ``Validation'' uses the
+difficulties excluded from training (\texttt{FINE\_TUNE\_CONFIGS}).}
+\label{tab:ftconfig}
+\small
+\begin{tabular}{lll}
+\toprule
+Curriculum & Train difficulties & Validation difficulties \\
+\midrule
+\textit{easy}        & easy               & medium, hard, very\_hard \\
+\textit{easy\_medium} & easy, medium       & hard, very\_hard \\
+\textit{hard}        & hard               & easy, medium, very\_hard \\
+\textit{full}        & all                & --- (no holdout) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each curriculum is run under two prompting settings: \textbf{no physics hint}
+(video + question only) and \textbf{with physics hint} (object physical
+parameters appended to the prompt). Together with the non-fine-tuned
+\emph{zero-shot} baseline, this yields five conditions per model and prompting
+setting, evaluated on the same held-out \textsc{test} split
+($25{,}436$ questions; $22{,}635$ excluding the degenerate \textit{unknown}
+bucket). Results are reported in Section~\ref{sec:finetune-results} and
+Table~\ref{tab:finetune-ablation}.

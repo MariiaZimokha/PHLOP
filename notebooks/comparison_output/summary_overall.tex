@@ -1,0 +1,28 @@
+\begin{table}
+\caption{PHLOP answer accuracy (\%), corrected to exclude unanswerable (empty-ground-truth) items - No physics hint.}
+\label{tab:phlop_acc_no_physics}
+\begin{tabular}{lrrrrr}
+\toprule
+ & Zero-shot & Easy & Easy+Med & Hard & Full \\
+\midrule
+SmolVLM & 24.59 & 61.43 & 69.35 & 55.61 & 82.43 \\
+Qwen2-VL & 13.07 & 10.09 & 39.33 & 29.54 & 45.65 \\
+InternVL3 & 14.60 & 61.30 & 84.27 & 82.45 & 82.28 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\begin{table}
+\caption{PHLOP answer accuracy (\%), corrected to exclude unanswerable (empty-ground-truth) items - With physics hint.}
+\label{tab:phlop_acc_with_physics}
+\begin{tabular}{lrrrrr}
+\toprule
+ & Zero-shot & Easy & Easy+Med & Hard & Full \\
+\midrule
+SmolVLM & 24.63 & 66.70 & 77.51 & 54.01 & 86.88 \\
+Qwen2-VL & 7.61 & 38.00 & 64.23 & 44.56 & 59.59 \\
+InternVL3 & 13.11 & 64.36 & 91.04 & 87.06 & 90.06 \\
+\bottomrule
+\end{tabular}
+\end{table}

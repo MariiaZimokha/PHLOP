@@ -1,0 +1,868 @@
+"""
+SmolVLM-specific PHLOP eval: zero-shot, fine-tuning, test comparison.
+Works with PHLOPDataset (path-based) returned by load_phlop_splits().
+
+Notebook usage:
+    from phlop_eval_common import load_phlop_splits, FINE_TUNE_CONFIGS
+    from smol_eval import finetune_single_config
+    
+    splits = load_phlop_splits("zimmari-ai/phlop", token=True)
+    OUTPUT_DIR = "./out"
+    MAX_STEPS = 50
+    
+    for cfg_name in FINE_TUNE_CONFIGS:
+        for use_physics in [False, True]:
+            ckpt = finetune_single_config(
+                splits,
+                cfg_name=cfg_name,
+                output_dir=OUTPUT_DIR,
+                max_steps=MAX_STEPS,
+                camera_mode="static",
+                use_physics=use_physics,
+            )
+"""
+from __future__ import annotations
+
+import gc
+import json
+import os
+import sys
+import tempfile
+import zipfile
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+import torch
+from PIL import Image
+from tqdm import tqdm
+from torch.utils.data import Dataset
+from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers import Trainer, TrainingArguments, EarlyStoppingCallback
+try:
+    from transformers.video_utils import VideoMetadata
+except ImportError:
+    from dataclasses import dataclass, field
+
+    @dataclass
+    class VideoMetadata:
+        total_num_frames: int = 0
+        fps: float = 25.0
+        duration: float = 0.0
+        frames_indices: list = field(default_factory=list)
+from peft import LoraConfig, get_peft_model
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from phlop_eval_common import (
+    compute_metrics,
+    print_metrics,
+    load_qa_from_path,
+    load_json_file,
+    get_physical_props,
+    flatten_taxonomy,
+    FINE_TUNE_CONFIGS,
+    get_val_difficulty_filter,
+    PHLOPSplits,
+)
+
+
+NUM_VIDEO_FRAMES = 6
+
+def _get_device() -> str:
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def _best_dtype(device: str) -> torch.dtype:
+    """bfloat16 has poor MPS kernel coverage; use float16 there."""
+    if device == "mps":
+        return torch.float16
+    return torch.bfloat16
+
+
+def _empty_device_cache(device: str) -> None:
+    if device == "cuda" or (isinstance(device, torch.device) and device.type == "cuda"):
+        torch.cuda.empty_cache()
+    elif device == "mps" or (isinstance(device, torch.device) and device.type == "mps"):
+        torch.mps.empty_cache()
+
+
+def _best_attn_implementation() -> str:
+    """Pick the fastest available attention: flash_attention_2 > sdpa > eager."""
+    try:
+        import flash_attn  # noqa: F401
+        if torch.cuda.is_available():
+            return "flash_attention_2"
+    except ImportError:
+        pass
+    return "sdpa"
+
+
+def _load_video_as_pil(
+    video_path: str, num_frames: int = NUM_VIDEO_FRAMES,
+) -> tuple[list[Image.Image], dict]:
+    empty_info: dict = {"total_num_frames": 0, "fps": 25.0, "duration": 0.0, "frames_indices": []}
+    if not video_path or not os.path.exists(video_path):
+        return [], empty_info
+    try:
+        from decord import VideoReader, cpu
+
+        vr = VideoReader(video_path, ctx=cpu(0), num_threads=4)
+        total = len(vr)
+
+        if total == 0:
+            return [], empty_info
+
+        fps = float(vr.get_avg_fps())
+        if fps <= 0:
+            fps = 25.0
+
+        duration = total / fps
+        indices = np.linspace(0, total - 1, min(num_frames, total), dtype=int).tolist()
+        frames = vr.get_batch(indices).asnumpy()
+        pil_frames = [Image.fromarray(f) for f in frames]
+
+        video_info = {
+            "total_num_frames": total,
+            "fps": fps,
+            "duration": duration,
+            "frames_indices": indices,
+        }
+        return pil_frames, video_info
+    except Exception as e:
+        print(f"  Warning: failed to load video {video_path}: {e}")
+        return [], empty_info
+
+
+def _build_prompt(question: str, video_info: dict, physical_props: dict = None) -> str:
+    duration = video_info.get("duration", 0.0)
+    fps = video_info.get("fps", 25.0)
+    n_frames = len(video_info.get("frames_indices", []))
+
+    props_section = ""
+    if physical_props:
+        props_lines = "\n".join(
+            f"- {v['color']} {v['shape']}: mass={v['mass']}, friction={v['friction'][0]:.2f}"
+            for v in physical_props.values()
+        )
+        props_section = f"\nObject properties:\n{props_lines}\n"
+
+    return (
+        "You are a physics reasoning system.\n"
+        "Watch the video and answer the question.\n\n"
+        f"Video details:\n"
+        f"- Duration: {duration:.1f} seconds\n"
+        f"- FPS: {fps:.0f}\n"
+        f"- Frames sampled: {n_frames}\n"
+        f"{props_section}\n"
+        "<video>\n\n"
+        f"Question:\n{question}\n\n"
+        "Respond with ONLY the final answer:\n"
+        "- yes/no questions: answer \"yes\" or \"no\"\n"
+        "- counting questions: answer with a number\n"
+        "- time questions: answer like \"0.5s\"\n"
+        "- multiple choice: pick exactly one option\n\n"
+        "Answer:\n"
+    )
+
+# ---------------------------------------------------------------------------
+# Dataset wrappers
+# ---------------------------------------------------------------------------
+
+def _parse_qa_json(raw) -> list[dict]:
+    """Parse QA data from raw JSON."""
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict):
+        return raw.get("questions", raw.get("qa", []))
+    return []
+
+
+def _process_shard_for_index(
+    shard_file: str,
+    scenes: list[tuple[int, str]],
+    base,
+    difficulty_set: Optional[set],
+) -> list[tuple[int, int]]:
+    """Download one shard zip (or use cache) and read all its QA files in one open."""
+    extract_dir = base.extract_root / Path(shard_file).stem if hasattr(base, "extract_root") else None
+    results: list[tuple[int, int]] = []
+
+    # Fast path: shard already extracted on disk — read from filesystem
+    if extract_dir and extract_dir.exists():
+        for scene_idx, qa_rel_path in scenes:
+            qa_path = extract_dir / qa_rel_path
+            if not qa_path.exists():
+                continue
+            try:
+                with open(qa_path) as f:
+                    qa_list = _parse_qa_json(json.load(f))
+            except Exception:
+                continue
+            for qa_idx, qa in enumerate(qa_list):
+                if difficulty_set is not None and (qa.get("difficulty") or "unknown").lower() not in difficulty_set:
+                    continue
+                results.append((scene_idx, qa_idx))
+        return results
+
+    # Download zip (HF hub caches it) and read all QA files in a single open
+    try:
+        zip_path = base._get_zip_path(shard_file)
+    except Exception as e:
+        print(f"  Warning: failed to download {shard_file}: {e}")
+        return results
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as z:
+            for scene_idx, qa_rel_path in scenes:
+                try:
+                    with z.open(qa_rel_path) as f:
+                        qa_list = _parse_qa_json(json.load(f))
+                except Exception:
+                    continue
+                for qa_idx, qa in enumerate(qa_list):
+                    if difficulty_set is not None and (qa.get("difficulty") or "unknown").lower() not in difficulty_set:
+                        continue
+                    results.append((scene_idx, qa_idx))
+    except Exception as e:
+        print(f"  Warning: failed to read {shard_file}: {e}")
+
+    return results
+
+
+def _build_index_lazy(
+    base,
+    camera_mode: str,
+    difficulty_filter: Optional[list[str]] = None,
+    fallback_cam: bool = False,
+    max_workers: int = 4,
+) -> list[tuple[int, int]]:
+    """Build (scene_idx, qa_idx) index without extracting shard zips.
+
+    Groups scenes by shard and processes shards in parallel to minimize
+    download and I/O time. Caches the result to disk for instant subsequent loads.
+    """
+    has_cache = hasattr(base, "extract_root")
+
+    diff_key = "_".join(sorted(d.lower() for d in difficulty_filter)) if difficulty_filter else "all"
+    fb_tag = "fb" if fallback_cam else "nofb"
+    cache_key = f"idx_{len(base)}_{camera_mode}_{diff_key}_{fb_tag}"
+
+    if has_cache:
+        cache_dir = base.extract_root / "index_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_path = cache_dir / f"{cache_key}.json"
+        if cache_path.exists():
+            with open(cache_path) as f:
+                index = json.load(f)
+            print(f"  Loaded cached index: {len(index)} pairs from {cache_path}")
+            return [tuple(x) for x in index]
+
+    difficulty_set = None if difficulty_filter is None else set(d.lower() for d in difficulty_filter)
+
+    # Step 1: fast parquet-only scan — group scenes by shard
+    shard_to_scenes: dict[str, list[tuple[int, str]]] = defaultdict(list)
+
+    for scene_idx in range(len(base)):
+        raw = base.get_raw_row(scene_idx)
+        shard_file = raw.get("shard_file")
+        if not shard_file:
+            continue
+        qa_rel_path = (raw.get("qa") or {}).get(camera_mode)
+        if not qa_rel_path and fallback_cam:
+            other_cam = "moving" if camera_mode == "static" else "static"
+            qa_rel_path = (raw.get("qa") or {}).get(other_cam)
+        if not qa_rel_path:
+            continue
+        shard_to_scenes[shard_file].append((scene_idx, qa_rel_path))
+
+    n_shards = len(shard_to_scenes)
+    n_scenes = sum(len(v) for v in shard_to_scenes.values())
+    workers = min(max_workers, n_shards)
+    print(f"  {n_scenes} scenes across {n_shards} shards — parallel download/read ({workers} workers)")
+
+    # Step 2: download + read QA from each shard in parallel
+    index: list[tuple[int, int]] = []
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(_process_shard_for_index, sf, scenes, base, difficulty_set): sf
+            for sf, scenes in shard_to_scenes.items()
+        }
+        for future in tqdm(as_completed(futures), total=n_shards, desc=f"Indexing shards"):
+            try:
+                index.extend(future.result())
+            except Exception as e:
+                print(f"  Warning: shard failed: {e}")
+
+    index.sort()
+
+    if has_cache:
+        with open(cache_path, "w") as f:
+            json.dump(index, f)
+        print(f"  Cached index ({len(index)} pairs) to {cache_path}")
+
+    return index
+
+
+class PHLOPTrainDataset(Dataset):
+    def __init__(
+        self,
+        base_dataset,
+        difficulty_filter: Optional[list[str]] = None,
+        camera_mode: str = "static",
+        num_frames: int = NUM_VIDEO_FRAMES,
+        use_physics: bool = False,
+    ):
+        self.base = base_dataset
+        self.camera_mode = camera_mode
+        self.num_frames = num_frames
+        self.use_physics = use_physics
+        self.difficulty_filter = None if difficulty_filter is None else set(d.lower() for d in difficulty_filter)
+        print(f"  Building training index (camera={camera_mode}, difficulty={difficulty_filter})...")
+        self.index = _build_index_lazy(
+            self.base, camera_mode, difficulty_filter, fallback_cam=False,
+        )
+        print(f"  Training index: {len(self.index)} (scene, question) pairs")
+
+    def __len__(self):
+        return len(self.index)
+
+    def __getitem__(self, idx):
+        scene_idx, qa_idx = self.index[idx]
+        sample = self.base[scene_idx]
+
+        cam = sample.get("camera_mode", self.camera_mode) or self.camera_mode
+        video_path = (sample.get("videos") or {}).get(cam)
+        meta_path = (sample.get("metadata") or {}).get(cam)
+        qa_path = (sample.get("qa") or {}).get(cam)
+
+        metadata = load_json_file(meta_path)
+        qa_list = load_qa_from_path(qa_path)
+        qa_entry = qa_list[qa_idx] if qa_idx < len(qa_list) else {}
+
+        video_frames, video_info = _load_video_as_pil(video_path, self.num_frames)
+        
+        # Fallback to prevent processor crash if video is entirely missing
+        if not video_frames:
+             video_frames = [Image.new("RGB", (384, 384))] * self.num_frames
+             video_info = {"total_num_frames": self.num_frames, "fps": 25.0, "duration": 0.0, "frames_indices": [0]*self.num_frames}
+
+        question = qa_entry.get("question", "")
+        answer = qa_entry.get("answer", "")
+        if isinstance(answer, list):
+            answer = ", ".join(str(a) for a in answer)
+        if qa_entry.get("options"):
+            opts = "\n".join(f"- {o}" for o in qa_entry["options"])
+            question = f"{question}\nOptions:\n{opts}"
+
+        physics = get_physical_props(metadata) if self.use_physics else None
+        prompt = _build_prompt(question, video_info, physics)
+        target = str(answer)
+
+        return {
+            "video": video_frames,
+            "video_info": video_info,
+            "prompt": prompt,
+            "target": target,
+            "metadata": metadata,
+            "qa_entry": qa_entry,
+        }
+
+
+class PHLOPValDataset(Dataset):
+    def __init__(self, base_dataset, camera_mode: str = "static", num_frames: int = NUM_VIDEO_FRAMES, use_physics: bool = False):
+        self.base = base_dataset
+        self.camera_mode = camera_mode
+        self.num_frames = num_frames
+        self.use_physics = use_physics
+        print(f"  Building eval index (camera={camera_mode})...")
+        self.index = _build_index_lazy(
+            self.base, camera_mode, fallback_cam=True,
+        )
+        print(f"  Eval index: {len(self.index)} (scene, question) pairs from {len(self.base)} scenes")
+
+    def __len__(self):
+        return len(self.index)
+
+    def __getitem__(self, idx):
+        scene_idx, qa_idx = self.index[idx]
+        sample = self.base[scene_idx]
+
+        cam = self.camera_mode
+        video_path = (sample.get("videos") or {}).get(cam)
+        meta_path = (sample.get("metadata") or {}).get(cam)
+        qa_path = (sample.get("qa") or {}).get(cam)
+
+        qa_list = load_qa_from_path(qa_path)
+        if not qa_list:
+            other_cam = "moving" if cam == "static" else "static"
+            qa_path = (sample.get("qa") or {}).get(other_cam)
+            qa_list = load_qa_from_path(qa_path)
+            if qa_list:
+                video_path = (sample.get("videos") or {}).get(other_cam)
+                meta_path = (sample.get("metadata") or {}).get(other_cam)
+
+        qa_entry = qa_list[qa_idx] if qa_idx < len(qa_list) else {}
+        metadata = load_json_file(meta_path)
+        video_frames, video_info = _load_video_as_pil(video_path, self.num_frames)
+        
+        # Fallback to prevent processor crash
+        if not video_frames:
+             video_frames = [Image.new("RGB", (384, 384))] * self.num_frames
+             video_info = {"total_num_frames": self.num_frames, "fps": 25.0, "duration": 0.0, "frames_indices": [0]*self.num_frames}
+
+        question = qa_entry.get("question", "")
+        answer = qa_entry.get("answer", "")
+        if isinstance(answer, list):
+            answer = ", ".join(str(a) for a in answer)
+        if qa_entry.get("options"):
+            opts = "\n".join(f"- {o}" for o in qa_entry["options"])
+            question = f"{question}\nOptions:\n{opts}"
+
+        physics = get_physical_props(metadata) if self.use_physics else None
+        prompt = _build_prompt(question, video_info, physics)
+        target = str(answer)
+
+        return {
+            "video": video_frames,
+            "video_info": video_info,
+            "prompt": prompt,
+            "target": target,
+            "metadata": metadata,
+            "qa_entry": qa_entry,
+            "camera_mode": cam,
+            "video_path": video_path or "",
+            "scene_idx": scene_idx,
+            "qa_idx": qa_idx,
+        }
+
+# ---------------------------------------------------------------------------
+# SmolVLM prediction collection and training
+# ---------------------------------------------------------------------------
+
+def _build_video_metadata(video_info: dict) -> VideoMetadata:
+    return VideoMetadata(
+        total_num_frames=video_info.get("total_num_frames", 0),
+        fps=video_info.get("fps", 25.0),
+        duration=video_info.get("duration", 0.0),
+        frames_indices=video_info.get("frames_indices", []),
+    )
+
+FLUSH_BATCH_SIZE = 500
+INFERENCE_BATCH_SIZE = 4
+
+def _prepare_batch_items(dataset, indices):
+    items = []
+    for i in indices:
+        try:
+            item = dataset[i]
+        except (ValueError, KeyError, FileNotFoundError) as e:
+            print(f"  Skipping idx {i}: {e}")
+            continue
+        if not item.get("video"):
+            print(f"  Skipping idx {i}: no video frames loaded")
+            continue
+        items.append((i, item))
+    return items
+
+def collect_predictions_smolvlm(
+    model, processor, dataset, max_samples=None, device=None,
+    batch_size: int = INFERENCE_BATCH_SIZE,
+    max_new_tokens: int = 64,
+):
+    model.eval()
+    if device is None:
+        device = str(next(model.parameters()).device)
+    device_str = str(device)
+    model_dtype = _best_dtype(device_str)
+    n = len(dataset) if max_samples is None else min(len(dataset), max_samples)
+
+    tmp_dir = tempfile.mkdtemp(prefix="smolvlm_batches_")
+    batch_files: list[str] = []
+    buffer: list[dict] = []
+
+    def _flush():
+        if not buffer:
+            return
+        batch_path = os.path.join(tmp_dir, f"batch_{len(batch_files):04d}.json")
+        with open(batch_path, "w") as f:
+            json.dump(buffer, f, default=str)
+        batch_files.append(batch_path)
+        buffer.clear()
+        gc.collect()
+
+    for batch_start in tqdm(range(0, n, batch_size), desc="Collecting predictions"):
+        batch_indices = list(range(batch_start, min(batch_start + batch_size, n)))
+        batch_items = _prepare_batch_items(dataset, batch_indices)
+        if not batch_items:
+            continue
+
+        videos = []
+        texts = []
+        video_metas = []
+        for _, item in batch_items:
+            vm = _build_video_metadata(item.get("video_info", {}))
+            videos.append([item["video"]])
+            texts.append(item["prompt"])
+            video_metas.append([vm])
+
+        inputs = processor(
+            videos=videos,
+            text=texts,
+            video_metadata=video_metas,
+            return_tensors="pt",
+            padding=True,
+        )
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        if "pixel_values" in inputs:
+            inputs["pixel_values"] = inputs["pixel_values"].to(model_dtype)
+
+        with torch.no_grad():
+            outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        preds = processor.batch_decode(outputs, skip_special_tokens=True)
+
+        del inputs, outputs
+        _empty_device_cache(device_str)
+
+        for pred, (orig_idx, item) in zip(preds, batch_items):
+            qa = item.get("qa_entry") or {}
+            answer_raw = qa.get("answer", "")
+            if isinstance(answer_raw, list):
+                answer_str = ", ".join(str(a) for a in answer_raw)
+            else:
+                answer_str = str(answer_raw)
+
+            tax_labels = list(flatten_taxonomy(item.get("metadata", {})))
+
+            buffer.append({
+                "idx": orig_idx,
+                "scene_idx": item.get("scene_idx"),
+                "qa_idx": item.get("qa_idx"),
+                "video_path": item.get("video_path", ""),
+                "camera_mode": item.get("camera_mode", ""),
+                "prompt": item["prompt"],
+                "question": qa.get("question", ""),
+                "options": qa.get("options"),
+                "difficulty": qa.get("difficulty", "unknown"),
+                "question_type": qa.get("question_type") or qa.get("category") or "unknown",
+                "category": qa.get("category") or "unknown",
+                "true_answer": answer_str,
+                "prediction": pred,
+                "target": item["target"],
+                "taxonomy_labels": tax_labels,
+                "physics_signals": qa.get("physics_signals", {}),
+            })
+            del item
+
+        if len(buffer) >= FLUSH_BATCH_SIZE:
+            _flush()
+
+    _flush()
+
+    results: list[dict] = []
+    for bp in batch_files:
+        with open(bp, "r") as f:
+            results.extend(json.load(f))
+        os.remove(bp)
+    os.rmdir(tmp_dir)
+
+    return results
+
+class SmolVLMDataCollator:
+    def __init__(self, processor):
+        self.processor = processor
+
+    def __call__(self, batch):
+        videos = [[x["video"]] for x in batch]
+        texts = [x["prompt"] + x["target"] for x in batch]
+        video_metadata = [[_build_video_metadata(x.get("video_info", {}))] for x in batch]
+        model_inputs = self.processor(
+            videos=videos,
+            text=texts,
+            video_metadata=video_metadata,
+            return_tensors="pt",
+            padding=True,
+        )
+        model_inputs["labels"] = model_inputs["input_ids"].clone()
+        return model_inputs
+
+class SmolVLMTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        inputs.pop("num_items_in_batch", None)
+        outputs = model(**inputs)
+        return (outputs.loss, outputs) if return_outputs else outputs.loss
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+SMOLVLM_MODEL_ID = "HuggingFaceTB/SmolVLM2-2.2B-Instruct"
+
+def run_zero_shot_smolvlm(
+    splits: PHLOPSplits,
+    camera_mode: str = "static",
+    max_samples: Optional[int] = None,
+    model=None,
+    processor=None,
+    device: Optional[str] = None,
+    results_dir: Optional[str] = "results",
+    eval_splits: Optional[list[str]] = None,
+    compile_model: bool = False,
+    batch_size: int = INFERENCE_BATCH_SIZE,
+    max_new_tokens: int = 64,
+    num_frames: int = NUM_VIDEO_FRAMES,
+    use_physics: bool = False,
+) -> dict[str, dict]:
+    eval_splits = eval_splits or ["test"]
+    physics_tag = "with_physics" if use_physics else "no_physics"
+    available = [s for s in eval_splits if s in splits]
+    if not available:
+        print(f"None of {eval_splits} found in splits.")
+        return {}
+    if device is None:
+        device = _get_device()
+    dtype = _best_dtype(device)
+    if processor is None:
+        processor = AutoProcessor.from_pretrained(SMOLVLM_MODEL_ID)
+    processor.tokenizer.padding_side = "left"
+    if model is None:
+        model = AutoModelForImageTextToText.from_pretrained(
+            SMOLVLM_MODEL_ID,
+            torch_dtype=dtype,
+            attn_implementation=_best_attn_implementation(),
+        )
+        
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        
+    if results_dir:
+        os.makedirs(results_dir, exist_ok=True)
+    print(f"Using device: {device} (dtype={dtype}, frames={num_frames}, physics={use_physics})")
+
+    model = model.to(device)
+
+    if compile_model:
+        try:
+            model = torch.compile(model)
+            print("  torch.compile() applied")
+        except Exception as e:
+            print(f"  torch.compile() failed, continuing without: {e}")
+    out = {}
+    for split_name in available:
+        val_ds = PHLOPValDataset(splits[split_name], camera_mode=camera_mode, num_frames=num_frames, use_physics=use_physics)
+        n_eval = len(val_ds) if max_samples is None else min(max_samples, len(val_ds))
+        print(f"\n--- Zero-shot on {split_name} ({camera_mode}, {physics_tag}): {len(val_ds)} questions (evaluating {n_eval}) ---")
+        results = collect_predictions_smolvlm(
+            model, processor, val_ds,
+            max_samples=max_samples, device=device,
+            batch_size=batch_size, max_new_tokens=max_new_tokens,
+        )
+        for r in results:
+            r["split"] = split_name
+            r["camera_mode"] = camera_mode
+            r["use_physics"] = use_physics
+        metrics = compute_metrics(results)
+        print_metrics(metrics, f"Zero-shot {split_name} ({physics_tag})")
+        out[split_name] = {"metrics": metrics, "n_questions": len(results)}
+        if results_dir:
+            pred_path = os.path.join(results_dir, f"smolvlm_zero_shot_predictions_{split_name}_{camera_mode}_{physics_tag}.json")
+            with open(pred_path, "w") as f:
+                json.dump(results, f, indent=2, default=str)
+            print(f"  Saved {len(results)} predictions to {pred_path}")
+    return out
+
+
+def finetune_single_config(
+    splits: PHLOPSplits,
+    cfg_name: str,
+    output_dir: str = "./smolvlm_physics_full",
+    max_steps: int = -1,
+    num_epochs: int = 1,
+    camera_mode: str = "static",
+    use_physics: bool = False,
+    early_stopping_patience: int = 3,
+    eval_steps: int = 100,
+) -> Optional[str]:
+    """Fine-tune SmolVLM on a single difficulty config. Returns checkpoint dir or None.
+
+    Training length is controlled by either max_steps or num_epochs:
+      - max_steps > 0: train for exactly that many steps (num_epochs is ignored).
+      - max_steps == -1 (default): train for num_epochs full passes over the data;
+        early stopping will halt training when eval loss stops improving.
+
+    Args:
+        eval_steps: Evaluate every N optimizer steps (default 100). Lower values
+                    let early stopping react faster but add eval overhead.
+    """
+    if "train" not in splits:
+        print("Need train split for fine-tuning.")
+        return None
+    
+    physics_tag = "with_physics" if use_physics else "no_physics"
+    cfg = FINE_TUNE_CONFIGS[cfg_name]
+    
+    print(f"\n{'='*60}")
+    print(f"Fine-tuning config: {cfg_name} ({physics_tag})")
+    
+    processor = AutoProcessor.from_pretrained(SMOLVLM_MODEL_ID)
+    processor.tokenizer.padding_side = "left"
+    lora_config = LoraConfig(
+        r=16,
+        lora_alpha=16,
+        lora_dropout=0.0,
+        target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+    data_collator = SmolVLMDataCollator(processor)
+    
+    train_backend = splits["train"]
+    val_backend = splits.get("validation", train_backend)
+    
+    train_diff = cfg["train_difficulty"]
+    val_diff = get_val_difficulty_filter(train_diff) if cfg["val_on_rest"] else None
+    print(f"  Train difficulties: {train_diff}, Val difficulties: {val_diff}")
+
+    train_ds = PHLOPTrainDataset(train_backend, difficulty_filter=train_diff, camera_mode=camera_mode, use_physics=use_physics)
+    if len(train_ds) == 0:
+        print(f"  Skipping config {cfg_name}: no training samples.")
+        return None
+        
+    if cfg["val_on_rest"] and val_backend is not None:
+        val_ds = PHLOPTrainDataset(val_backend, difficulty_filter=val_diff, camera_mode=camera_mode, use_physics=use_physics)
+    else:
+        val_ds = PHLOPValDataset(val_backend, camera_mode=camera_mode, use_physics=use_physics)
+
+    device = _get_device()
+    dtype = _best_dtype(device)
+    attn_impl = _best_attn_implementation()
+    print(f"  Attention implementation: {attn_impl}")
+    model = AutoModelForImageTextToText.from_pretrained(
+        SMOLVLM_MODEL_ID,
+        torch_dtype=dtype,
+        attn_implementation=attn_impl,
+    )
+    
+    model = get_peft_model(model, lora_config)
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    
+    model.print_trainable_parameters()
+    
+    ckpt_dir = os.path.join(output_dir, f"{cfg_name}_{physics_tag}")
+    use_bf16 = (device != "mps")
+    use_fp16 = (device == "mps")
+    
+    use_steps = max_steps > 0
+    eval_every = eval_steps if eval_steps > 0 else 100
+
+    if use_steps:
+        warmup = max(1, max_steps // 10)
+        print(f"  Training: {max_steps} steps, eval every {eval_every} steps, "
+              f"early stopping patience={early_stopping_patience}")
+    else:
+        warmup = 0
+        print(f"  Training: {num_epochs} epoch(s), eval every {eval_every} steps, "
+              f"early stopping patience={early_stopping_patience}")
+
+    training_args = TrainingArguments(
+        output_dir=ckpt_dir,
+        per_device_train_batch_size=1,
+        gradient_accumulation_steps=16,
+        gradient_checkpointing=True,
+        learning_rate=1e-4,
+        max_steps=max_steps if use_steps else -1,
+        num_train_epochs=num_epochs if not use_steps else 1,
+        lr_scheduler_type="cosine",
+        warmup_steps=warmup if use_steps else 10,
+        weight_decay=0.01,
+        bf16=use_bf16,
+        fp16=use_fp16,
+        logging_steps=10,
+        save_steps=eval_every,
+        save_total_limit=2,
+        eval_strategy="steps",
+        eval_steps=eval_every,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+        remove_unused_columns=False,
+        report_to="none",
+        optim="paged_adamw_8bit",
+        dataloader_pin_memory=True,
+        dataloader_num_workers=4,
+    )
+    
+    trainer = SmolVLMTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_ds,
+        eval_dataset=val_ds,
+        data_collator=data_collator,
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=early_stopping_patience)],
+    )
+    trainer.train()
+    trainer.save_model(ckpt_dir)
+    print(f"  Model saved to: {ckpt_dir}")
+    
+    del model
+    _empty_device_cache(device)
+    
+    return ckpt_dir
+
+
+def run_test_comparison_smolvlm(
+    splits: PHLOPSplits,
+    model_checkpoints: list[tuple[str, str]],
+    camera_mode: str = "static",
+    results_dir: Optional[str] = "results",
+    eval_splits: Optional[list[str]] = None,
+    use_physics: bool = False,
+) -> list[tuple[str, dict]]:
+    eval_splits = eval_splits or ["test"]
+    physics_tag = "with_physics" if use_physics else "no_physics"
+    available = [s for s in eval_splits if s in splits]
+    if not available:
+        print(f"None of {eval_splits} found in splits.")
+        return []
+    processor = AutoProcessor.from_pretrained(SMOLVLM_MODEL_ID)
+    processor.tokenizer.padding_side = "left"
+    device = _get_device()
+    dtype = _best_dtype(device)
+    if results_dir:
+        os.makedirs(results_dir, exist_ok=True)
+    table = []
+    for model_name, ckpt in model_checkpoints:
+        print(f"\n--- {model_name} ({camera_mode}, {physics_tag}) ---")
+        model = AutoModelForImageTextToText.from_pretrained(
+            ckpt, torch_dtype=dtype, attn_implementation=_best_attn_implementation(),
+        )
+        model = model.to(device)
+        model_metrics = {}
+        for split_name in available:
+            ds = PHLOPValDataset(splits[split_name], camera_mode=camera_mode, use_physics=use_physics)
+            results = collect_predictions_smolvlm(model, processor, ds, device=device)
+            for r in results:
+                r["split"] = split_name
+                r["camera_mode"] = camera_mode
+                r["model"] = model_name
+                r["use_physics"] = use_physics
+            metrics = compute_metrics(results)
+            model_metrics[split_name] = metrics
+            print(f"  {split_name}: answer_acc={metrics['answer_accuracy']:.4f}")
+            if results_dir:
+                out_path = os.path.join(results_dir, f"smolvlm_finetuned_predictions_{model_name}_{split_name}_{camera_mode}_{physics_tag}.json")
+                with open(out_path, "w") as f:
+                    json.dump(results, f, indent=2, default=str)
+                print(f"    Saved {len(results)} predictions to {out_path}")
+        table.append((model_name, model_metrics))
+        del model
+        _empty_device_cache(device)
+    return table
